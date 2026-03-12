@@ -14,9 +14,9 @@ const cards = [
 export default function Dashboard() {
   return (
     <div className="h-full overflow-auto">
-      <div className="flex flex-col lg:flex-row h-full">
+      <div className="flex flex-col lg:flex-row h-full max-w-[1400px] mx-auto">
         {/* Left Side - Flower Images */}
-        <div className="hidden lg:flex flex-col gap-4 w-[460px] flex-shrink-0 ml-[60px] py-6">
+        <div className="hidden lg:flex flex-col gap-4 w-[35%] max-w-[460px] flex-shrink-0 ml-[60px] py-6">
           <div className="flex-1 min-h-0 rounded-[40px] overflow-hidden">
             <img
               src="https://images.unsplash.com/photo-1766682946451-4e05315828b6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwaW5rJTIwcm9zZXMlMjBmbG9yYWwlMjBhcnJhbmdlbWVudCUyMHNob3B8ZW58MXx8fHwxNzczMjgwODI5fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral"
