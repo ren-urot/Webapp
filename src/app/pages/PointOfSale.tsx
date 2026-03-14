@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Plus, Minus, X, CreditCard, Smartphone, ShoppingBag, Trash2, Banknote, ChevronLeft, ChevronRight, Truck, Store, MapPin, Printer, Loader2 } from "lucide-react";
 // Image component with error fallback
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
 import * as api from "../lib/api";
+import { QRCodeSVG } from "qrcode.react";
 
 interface Product {
   id: number;
@@ -277,6 +278,43 @@ export default function PointOfSale() {
       status: "Completed",
     }).catch(err => console.error("Failed to save order:", err));
 
+    // Deduct inventory stock
+    api.posSale(cart.map(i => ({ id: i.id, qty: i.qty })))
+      .then(() => {
+        // Refresh products list to reflect updated stock
+        api.getProducts().then(setProducts).catch(err => console.error("Failed to refresh products:", err));
+      })
+      .catch(err => console.error("Failed to deduct inventory stock:", err));
+
+    // Create delivery record if fulfillment is delivery
+    if (fulfillment === "delivery") {
+      const now2 = new Date();
+      const scheduledDate = now2.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+      const scheduledTime = now2.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+      const orderTime = now2.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+      api.createDelivery({
+        orderId: receiptNo,
+        customer: "Walk-in Customer",
+        phone: "—",
+        address: deliveryAddress || "No address provided",
+        items: itemsSummary,
+        scheduledDate,
+        scheduledTime,
+        driver: "Unassigned",
+        status: "Preparing",
+        estimatedArrival: "—",
+        notes: deliveryNote || "",
+        timeline: [
+          { step: "Order Placed", time: orderTime, done: true },
+          { step: "Preparing Order", time: "Pending", done: false },
+          { step: "Picked Up by Driver", time: "Pending", done: false },
+          { step: "Out for Delivery", time: "Pending", done: false },
+          { step: "Delivered", time: "Pending", done: false },
+        ],
+      }).catch(err => console.error("Failed to create delivery record:", err));
+    }
+
     // Prepare receipt data
     const receiptData: NonNullable<typeof lastReceipt> = {
       items: cart,
@@ -307,6 +345,9 @@ export default function PointOfSale() {
     setCardForm({ name: "", number: "", expiry: "", cvv: "" });
     setGcashForm({ name: "", phone: "" });
     setCashReceived("");
+    setDeliveryAddress("");
+    setDeliveryNote("");
+    setFulfillment("pickup");
   };
 
   return (
@@ -663,8 +704,8 @@ export default function PointOfSale() {
       {/* GCash Payment Modal */}
       {paymentMethod === "gcash" && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
-            <div className="flex items-center justify-between mb-6">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-5">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-[#e8f4ff] rounded-full flex items-center justify-center">
                   <Smartphone className="w-5 h-5 text-[#007dfe]" />
@@ -676,7 +717,7 @@ export default function PointOfSale() {
               </button>
             </div>
 
-            <div className="bg-[#e8f4ff] rounded-lg p-4 mb-6">
+            <div className="bg-[#e8f4ff] rounded-lg p-4 mb-5">
               <div className="flex justify-between text-[14px] mb-1">
                 <span className="text-[#5d5d5d]">Amount to Pay</span>
                 <span className="text-[#007dfe] text-[22px] font-semibold">P{total.toLocaleString()}</span>
@@ -684,43 +725,64 @@ export default function PointOfSale() {
               <p className="text-[#999] text-[12px]">{cart.length} item(s) + 12% tax</p>
             </div>
 
-            <div className="space-y-4">
+            {/* QR Code Section */}
+            <div className="bg-[#fafafa] rounded-xl p-5 mb-5">
+              <p className="text-[#383838] text-[14px] font-semibold text-center mb-3">Scan QR Code to Pay</p>
+              <div className="flex justify-center mb-3">
+                <div className="bg-white p-3 rounded-xl shadow-sm border border-[#e9e9e9]">
+                  <QRCodeSVG
+                    value={`gcash://pay?amount=${total}&merchant=BloomAndPetal&ref=${Date.now()}`}
+                    size={180}
+                    bgColor="#ffffff"
+                    fgColor="#007dfe"
+                    level="M"
+                    includeMargin={false}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-center gap-2 text-[#007dfe] mb-2">
+                <Smartphone className="w-4 h-4" />
+                <span className="text-[13px] font-medium">Open GCash app & scan</span>
+              </div>
+              <p className="text-[#999] text-[11px] text-center">QR code expires in 10 minutes</p>
+            </div>
+
+            {/* Divider with "or" */}
+            <div className="flex items-center gap-3 mb-5">
+              <div className="flex-1 h-px bg-[#e9e9e9]" />
+              <span className="text-[#999] text-[12px] font-medium">or enter details manually</span>
+              <div className="flex-1 h-px bg-[#e9e9e9]" />
+            </div>
+
+            <div className="space-y-3">
               <div>
-                <label className="block text-[#383838] text-[14px] font-medium mb-2">Account Name</label>
+                <label className="block text-[#383838] text-[13px] font-medium mb-1.5">Account Name</label>
                 <input
                   type="text"
                   value={gcashForm.name}
                   onChange={e => setGcashForm({ ...gcashForm, name: e.target.value })}
                   placeholder="Juan Dela Cruz"
-                  className="w-full px-4 py-2.5 border border-[#d8d8d8] rounded-lg focus:outline-none focus:border-[#007dfe]"
+                  className="w-full px-4 py-2.5 border border-[#d8d8d8] rounded-lg focus:outline-none focus:border-[#007dfe] text-[14px]"
                 />
               </div>
               <div>
-                <label className="block text-[#383838] text-[14px] font-medium mb-2">GCash Number</label>
+                <label className="block text-[#383838] text-[13px] font-medium mb-1.5">GCash Number</label>
                 <input
                   type="tel"
                   value={gcashForm.phone}
                   onChange={e => setGcashForm({ ...gcashForm, phone: e.target.value })}
                   placeholder="09XX XXX XXXX"
-                  className="w-full px-4 py-2.5 border border-[#d8d8d8] rounded-lg focus:outline-none focus:border-[#007dfe]"
+                  className="w-full px-4 py-2.5 border border-[#d8d8d8] rounded-lg focus:outline-none focus:border-[#007dfe] text-[14px]"
                 />
-              </div>
-
-              <div className="bg-[#fafafa] rounded-lg p-4 text-center">
-                <p className="text-[#5d5d5d] text-[13px] mb-2">A payment request will be sent to your GCash app for confirmation.</p>
-                <div className="flex items-center justify-center gap-2 text-[#007dfe]">
-                  <Smartphone className="w-4 h-4" />
-                  <span className="text-[13px] font-medium">Check your phone for the GCash notification</span>
-                </div>
               </div>
             </div>
 
-            <div className="flex flex-col gap-2 mt-6">
+            <div className="flex flex-col gap-2 mt-5">
               <button
                 onClick={handlePayment}
                 className="w-full px-6 py-3 bg-[#007dfe] text-white rounded-lg hover:bg-[#0066d1] transition-colors font-medium"
               >
-                Send Payment Request
+                Confirm Payment
               </button>
               <button
                 onClick={() => setPaymentMethod(null)}
