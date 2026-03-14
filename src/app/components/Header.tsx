@@ -1,51 +1,26 @@
 import { Link, useLocation, useNavigate } from "react-router";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ShoppingBag, ChevronRight, ChevronDown, LogOut, User, X, Mail, Phone, MapPin, Briefcase, Check, Menu } from "lucide-react";
 import svgPaths from "../../imports/svg-vr1w7212pc";
+import { useAuth } from "../lib/AuthContext";
+import * as api from "../lib/api";
 
-const initialNotifications = [
-  {
-    id: 1,
-    title: "New Order Received",
-    message: "Emma Wilson placed an order for a Wedding Bouquet - ₱3,500",
-    time: "5 min ago",
-    read: false,
-    type: "order" as const,
-  },
-  {
-    id: 2,
-    title: "Workshop Registration",
-    message: "3 new sign-ups for \"Spring Arrangement\" workshop on Mar 15",
-    time: "28 min ago",
-    read: false,
-    type: "workshop" as const,
-  },
-  {
-    id: 3,
-    title: "Low Stock Alert",
-    message: "Red Roses inventory is below 20 stems. Restock recommended.",
-    time: "1 hr ago",
-    read: false,
-    type: "inventory" as const,
-  },
-  {
-    id: 4,
-    title: "Payment Confirmed",
-    message: "Payment of ₱5,200 received from Maria Santos for Order #1042",
-    time: "3 hrs ago",
-    read: true,
-    type: "order" as const,
-  },
-  {
-    id: 5,
-    title: "New Customer Added",
-    message: "Carlos Reyes was added to your customer list",
-    time: "5 hrs ago",
-    read: true,
-    type: "customer" as const,
-  },
-];
+// Helper to format ISO timestamp into relative time
+function timeAgo(isoString: string): string {
+  const now = Date.now();
+  const then = new Date(isoString).getTime();
+  const diffMs = now - then;
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return "Just now";
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} min ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr} hr${diffHr > 1 ? "s" : ""} ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 7) return `${diffDay} day${diffDay > 1 ? "s" : ""} ago`;
+  return new Date(isoString).toLocaleDateString();
+}
 
 export default function Header() {
   const location = useLocation();
@@ -54,11 +29,32 @@ export default function Header() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [notifications, setNotifications] = useState(initialNotifications);
+  const [notifications, setNotifications] = useState<any[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
+
+  const fetchNotifications = useCallback(async () => {
+    try {
+      const data = await api.getNotifications();
+      setNotifications(data);
+    } catch (err) {
+      console.error("Failed to fetch notifications:", err);
+    }
+  }, []);
+
+  // Fetch notifications on mount and poll every 30s
+  useEffect(() => {
+    fetchNotifications();
+    const interval = setInterval(fetchNotifications, 30000);
+    return () => clearInterval(interval);
+  }, [fetchNotifications]);
+
+  // Also refresh when dropdown opens
+  useEffect(() => {
+    if (notifOpen) fetchNotifications();
+  }, [notifOpen, fetchNotifications]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -91,6 +87,18 @@ export default function Header() {
     { to: "/inventory", label: "Inventory" },
     { to: "/deliveries", label: "Deliveries" },
   ];
+
+  const { user, signOut, displayName } = useAuth();
+  const userEmail = user?.email || "";
+  const userPlan = user?.user_metadata?.plan || "basic";
+  const memberSince = user?.created_at
+    ? new Date(user.created_at).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+    : "N/A";
+
+  const handleLogout = async () => {
+    await signOut();
+    navigate("/login");
+  };
 
   return (
     <header className="sticky top-0 z-50 bg-[rgba(255,255,255,0.95)] border-b border-[#d8d8d8] backdrop-blur-sm">
@@ -156,11 +164,12 @@ export default function Header() {
                   <h3 className="text-[#ff4e00] text-[18px] font-medium">Notifications</h3>
                   {unreadCount > 0 && (
                     <button
-                      onClick={() =>
+                      onClick={async () => {
                         setNotifications((prev) =>
                           prev.map((n) => ({ ...n, read: true }))
-                        )
-                      }
+                        );
+                        try { await api.markAllNotificationsRead(); } catch (err) { console.error("Failed to mark all read:", err); }
+                      }}
                       className="flex items-center gap-1 text-[13px] text-[#9a9a9a] hover:text-[#ff4e00] transition-colors"
                     >
                       <Check className="w-3.5 h-3.5" />
@@ -171,16 +180,23 @@ export default function Header() {
 
                 {/* Notification List */}
                 <div className="max-h-[340px] overflow-y-auto">
-                  {notifications.map((notif, idx) => (
+                  {notifications.length === 0 ? (
+                    <div className="px-5 py-10 text-center">
+                      <p className="text-[#9a9a9a] text-[14px]">No notifications yet</p>
+                      <p className="text-[#c0c0c0] text-[12px] mt-1">Actions like adding customers or orders will appear here</p>
+                    </div>
+                  ) : (
+                  notifications.map((notif, idx) => (
                     <button
                       key={notif.id}
-                      onClick={() =>
+                      onClick={async () => {
                         setNotifications((prev) =>
                           prev.map((n) =>
                             n.id === notif.id ? { ...n, read: true } : n
                           )
-                        )
-                      }
+                        );
+                        try { await api.markNotificationRead(notif.id); } catch (err) { console.error("Failed to mark notification read:", err); }
+                      }}
                       className={`w-full text-left px-4 sm:px-5 py-3.5 flex gap-3 items-start hover:bg-[#fff5f0] transition-colors ${
                         idx < notifications.length - 1 ? "border-b border-[#f0f0f0]" : ""
                       } ${!notif.read ? "bg-[#fff8f5]" : ""}`}
@@ -198,28 +214,35 @@ export default function Header() {
                           <p className={`text-[14px] truncate ${!notif.read ? "text-[#383838] font-semibold" : "text-[#5d5d5d] font-medium"}`}>
                             {notif.title}
                           </p>
-                          <span className="text-[11px] text-[#b0b0b0] flex-shrink-0">{notif.time}</span>
+                          <span className="text-[11px] text-[#b0b0b0] flex-shrink-0">{timeAgo(notif.time)}</span>
                         </div>
                         <p className="text-[13px] text-[#9a9a9a] mt-0.5 line-clamp-2">
                           {notif.message}
                         </p>
                       </div>
                     </button>
-                  ))}
+                  ))
+                  )}
                 </div>
 
                 {/* Footer */}
+                {notifications.length > 0 && (
                 <div className="border-t border-[#e9e9e9] px-5 py-3">
                   <button
-                    onClick={() => {
+                    onClick={async () => {
+                      const ids = notifications.map(n => n.id);
                       setNotifications([]);
                       setNotifOpen(false);
+                      for (const id of ids) {
+                        try { await api.deleteNotification(id); } catch (err) { console.error("Failed to delete notification:", err); }
+                      }
                     }}
                     className="w-full text-center text-[13px] text-[#9a9a9a] hover:text-[#ff4e00] transition-colors"
                   >
                     Clear all notifications
                   </button>
                 </div>
+                )}
               </div>
             )}
           </div>
@@ -253,7 +276,7 @@ export default function Header() {
                   </g>
                 </svg>
               </div>
-              <span className="text-[15px] font-medium">John Anderson</span>
+              <span className="text-[15px] font-medium">{displayName || "User"}</span>
               <ChevronDown className={`w-4 h-4 transition-transform ${userMenuOpen ? "rotate-180" : ""}`} />
             </button>
             {userMenuOpen && (
@@ -270,10 +293,7 @@ export default function Header() {
                 </button>
                 <div className="border-t border-[#e9e9e9] mx-2" />
                 <button
-                  onClick={() => {
-                    setUserMenuOpen(false);
-                    navigate("/login");
-                  }}
+                  onClick={handleLogout}
                   className="w-full flex items-center gap-3 px-4 py-2.5 text-[14px] text-[#c62828] hover:bg-[#fce4ec] transition-colors"
                 >
                   <LogOut className="w-4 h-4" />
@@ -324,7 +344,7 @@ export default function Header() {
                     <path d={svgPaths.p1e70a00} fill="#FF4E00" />
                   </g>
                 </svg>
-                <span className="text-[#383838] text-[15px] font-medium">John Anderson</span>
+                <span className="text-[#383838] text-[15px] font-medium">{displayName || "User"}</span>
               </div>
               <button
                 onClick={() => {
@@ -337,10 +357,7 @@ export default function Header() {
                 Profile Details
               </button>
               <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  navigate("/login");
-                }}
+                onClick={handleLogout}
                 className="w-full flex items-center gap-3 px-3 py-2.5 text-[14px] text-[#c62828] hover:bg-[#fce4ec] rounded-lg transition-colors"
               >
                 <LogOut className="w-4 h-4" />
@@ -391,8 +408,8 @@ export default function Header() {
 
             {/* Name & Role */}
             <div className="text-center mt-3 mb-5">
-              <p className="text-[#383838] text-[20px] font-semibold">John Anderson</p>
-              <p className="text-[#ff4e00] text-[14px] font-medium">Shop Owner</p>
+              <p className="text-[#383838] text-[20px] font-semibold">{displayName || "User"}</p>
+              <p className="text-[#ff4e00] text-[14px] font-medium capitalize">{userPlan} Plan</p>
             </div>
 
             {/* Details */}
@@ -401,28 +418,14 @@ export default function Header() {
                 <Mail className="w-4 h-4 text-[#ff4e00] flex-shrink-0" />
                 <div className="min-w-0">
                   <p className="text-[#9a9a9a] text-[11px]">Email</p>
-                  <p className="text-[#5d5d5d] text-[14px] truncate">john.anderson@bloomshop.com</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 px-4 py-3 bg-[#f6f6f6] rounded-lg">
-                <Phone className="w-4 h-4 text-[#ff4e00] flex-shrink-0" />
-                <div>
-                  <p className="text-[#9a9a9a] text-[11px]">Phone</p>
-                  <p className="text-[#5d5d5d] text-[14px]">+1 23 4567 890</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3 px-4 py-3 bg-[#f6f6f6] rounded-lg">
-                <MapPin className="w-4 h-4 text-[#ff4e00] flex-shrink-0" />
-                <div>
-                  <p className="text-[#9a9a9a] text-[11px]">Shop Address</p>
-                  <p className="text-[#5d5d5d] text-[14px]">123 Bloom Street, Makati City</p>
+                  <p className="text-[#5d5d5d] text-[14px] truncate">{userEmail}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3 px-4 py-3 bg-[#f6f6f6] rounded-lg">
                 <Briefcase className="w-4 h-4 text-[#ff4e00] flex-shrink-0" />
                 <div>
                   <p className="text-[#9a9a9a] text-[11px]">Member Since</p>
-                  <p className="text-[#5d5d5d] text-[14px]">January 2024</p>
+                  <p className="text-[#5d5d5d] text-[14px]">{memberSince}</p>
                 </div>
               </div>
 
