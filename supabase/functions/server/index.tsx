@@ -654,58 +654,91 @@ app.post(`${BASE}/deliveries`, async (c) => {
 });
 
 // ============================================================
-// POS PRODUCTS CRUD
+// POS PRODUCTS - reads from inventory (single source of truth)
 // ============================================================
 app.get(`${BASE}/products`, async (c) => {
   try {
-    const products = (await kv.get("crm_products")) || [];
+    const inventory: any[] = (await kv.get("crm_inventory")) || [];
+    // Transform inventory items into POS product format
+    // Only include items that are in stock (stock > 0)
+    const products = inventory
+      .filter((item: any) => item.stock > 0)
+      .map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        // Extract numeric price from string like "P60/stem", "P150", "₱200/bundle"
+        price: Number(String(item.price).replace(/[^0-9.]/g, "")) || 0,
+        image: item.image || "",
+        category: item.category || "Flowers",
+        stock: item.stock,
+      }));
     return c.json(products);
   } catch (error) {
-    console.log(`Error fetching products: ${error}`);
+    console.log(`Error fetching products from inventory: ${error}`);
     return c.json({ error: `Failed to fetch products: ${error}` }, 500);
   }
 });
 
-app.post(`${BASE}/products`, async (c) => {
-  try {
-    const body = await c.req.json();
-    const products = (await kv.get("crm_products")) || [];
-    const newProduct = { ...body, id: Date.now() };
-    products.push(newProduct);
-    await kv.set("crm_products", products);
-    return c.json(newProduct, 201);
-  } catch (error) {
-    console.log(`Error creating product: ${error}`);
-    return c.json({ error: `Failed to create product: ${error}` }, 500);
-  }
-});
+// Remove separate product CRUD - POS now uses inventory directly
+// Products are managed through the Inventory page
 
-app.put(`${BASE}/products/:id`, async (c) => {
+// ============================================================
+// POS SALE - deduct inventory stock after a sale
+// ============================================================
+app.post(`${BASE}/pos/sale`, async (c) => {
   try {
-    const id = Number(c.req.param("id"));
-    const body = await c.req.json();
-    const products = (await kv.get("crm_products")) || [];
-    const idx = products.findIndex((p: any) => p.id === id);
-    if (idx === -1) return c.json({ error: "Product not found" }, 404);
-    products[idx] = { ...products[idx], ...body };
-    await kv.set("crm_products", products);
-    return c.json(products[idx]);
-  } catch (error) {
-    console.log(`Error updating product: ${error}`);
-    return c.json({ error: `Failed to update product: ${error}` }, 500);
-  }
-});
+    const { cartItems } = await c.req.json();
+    // cartItems: [{ id: number, qty: number }, ...]
+    if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
+      return c.json({ error: "Cart items are required." }, 400);
+    }
 
-app.delete(`${BASE}/products/:id`, async (c) => {
-  try {
-    const id = Number(c.req.param("id"));
-    const products = (await kv.get("crm_products")) || [];
-    const filtered = products.filter((p: any) => p.id !== id);
-    await kv.set("crm_products", filtered);
-    return c.json({ success: true });
+    console.log(`POS Sale: Processing ${cartItems.length} cart items:`, JSON.stringify(cartItems));
+
+    const items: any[] = (await kv.get("crm_inventory")) || [];
+    console.log(`POS Sale: Loaded ${items.length} inventory items from KV`);
+    const lowStockAlerts: string[] = [];
+    const deductions: any[] = [];
+
+    for (const cartItem of cartItems) {
+      // Try both strict and loose ID matching to handle type mismatches
+      let idx = items.findIndex((item: any) => item.id === cartItem.id);
+      if (idx === -1) {
+        idx = items.findIndex((item: any) => String(item.id) === String(cartItem.id));
+        if (idx !== -1) {
+          console.log(`POS Sale: ID type mismatch fixed for item ${cartItem.id} (inventory type: ${typeof items[idx].id}, cart type: ${typeof cartItem.id})`);
+        }
+      }
+      if (idx !== -1) {
+        const oldStock = items[idx].stock;
+        items[idx].stock = Math.max(0, Number(items[idx].stock) - Number(cartItem.qty));
+        deductions.push({ name: items[idx].name, oldStock, newStock: items[idx].stock, qty: cartItem.qty });
+        // Update status based on new stock level
+        if (items[idx].stock === 0) {
+          items[idx].status = "Out of Stock";
+        } else if (items[idx].stock <= 15) {
+          items[idx].status = "Low Stock";
+          lowStockAlerts.push(`${items[idx].name} is now at ${items[idx].stock} units`);
+        } else {
+          items[idx].status = "In Stock";
+        }
+      } else {
+        console.log(`POS Sale: WARNING - Cart item ID ${cartItem.id} (type: ${typeof cartItem.id}) not found in inventory. Inventory IDs: ${items.map((i: any) => `${i.id}(${typeof i.id})`).join(', ')}`);
+      }
+    }
+
+    await kv.set("crm_inventory", items);
+    console.log(`POS Sale: Stock deductions saved:`, JSON.stringify(deductions));
+
+    // Send low stock notifications
+    for (const alert of lowStockAlerts) {
+      await addNotification("Low Stock Alert", `${alert}. Restock recommended.`, "inventory");
+    }
+
+    return c.json({ success: true, message: "Inventory stock updated after sale.", deductions });
   } catch (error) {
-    console.log(`Error deleting product: ${error}`);
-    return c.json({ error: `Failed to delete product: ${error}` }, 500);
+    console.log(`Error deducting inventory stock after POS sale: ${error}`);
+    return c.json({ error: `Failed to deduct stock: ${error}` }, 500);
   }
 });
 
