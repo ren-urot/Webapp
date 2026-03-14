@@ -38,6 +38,10 @@ export default function PointOfSale() {
   // Cash form state
   const [cashReceived, setCashReceived] = useState("");
 
+  // Sale processing state
+  const [processingSale, setProcessingSale] = useState(false);
+  const [saleError, setSaleError] = useState<string | null>(null);
+
   // Load products from database
   useEffect(() => {
     const loadProducts = async () => {
@@ -262,7 +266,11 @@ export default function PointOfSale() {
   const deliveryFee = fulfillment === "delivery" ? 150 : 0;
   const total = subtotal + tax + deliveryFee;
 
-  const handlePayment = () => {
+  const handlePayment = async () => {
+    if (processingSale) return; // Prevent double clicks
+    setProcessingSale(true);
+    setSaleError(null);
+
     // Save order to backend
     const itemsSummary = cart.map(i => `${i.name} x${i.qty}`).join(", ");
     const now = new Date();
@@ -270,87 +278,107 @@ export default function PointOfSale() {
     const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
     const receiptNo = `BP-${now.getFullYear().toString().slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
 
-    api.createOrder({
-      customer: "Walk-in Customer",
-      items: itemsSummary,
-      date: dateStr,
-      total: `P${total.toLocaleString()}`,
-      status: "Completed",
-    }).catch(err => console.error("Failed to save order:", err));
+    // Capture cart items before clearing
+    const cartSnapshot = [...cart];
+    const saleItems = cartSnapshot.map(i => ({ id: i.id, qty: i.qty }));
 
-    // Deduct inventory stock
-    const saleItems = cart.map(i => ({ id: i.id, qty: i.qty }));
-    console.log("POS Sale: Sending cart items for stock deduction:", JSON.stringify(saleItems));
-    api.posSale(saleItems)
-      .then((result) => {
-        console.log("POS Sale: Stock deduction response:", JSON.stringify(result));
-        // Refresh products list to reflect updated stock
-        api.getProducts().then(setProducts).catch(err => console.error("Failed to refresh products:", err));
-      })
-      .catch(err => console.error("Failed to deduct inventory stock:", err));
+    try {
+      // 1. Deduct inventory stock FIRST (await it so we know it worked)
+      console.log("POS Sale: Sending cart items for stock deduction:", JSON.stringify(saleItems));
+      const saleResult = await api.posSale(saleItems);
+      console.log("POS Sale: Stock deduction response:", JSON.stringify(saleResult));
+      if (saleResult.notFound && saleResult.notFound.length > 0) {
+        console.warn("POS Sale: Some items were NOT found in inventory:", JSON.stringify(saleResult.notFound));
+      }
+      if (saleResult.deductions) {
+        console.log("POS Sale: Deductions applied:", saleResult.deductions.map((d: any) => `${d.name}: ${d.oldStock} -> ${d.newStock} (qty: ${d.qty})`).join(", "));
+      }
 
-    // Create delivery record if fulfillment is delivery
-    if (fulfillment === "delivery") {
-      const now2 = new Date();
-      const scheduledDate = now2.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-      const scheduledTime = now2.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
-      const orderTime = now2.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
-
-      api.createDelivery({
-        orderId: receiptNo,
+      // 2. Create order record (fire-and-forget is OK for this)
+      api.createOrder({
         customer: "Walk-in Customer",
-        phone: "—",
-        address: deliveryAddress || "No address provided",
         items: itemsSummary,
-        scheduledDate,
-        scheduledTime,
-        driver: "Unassigned",
-        status: "Preparing",
-        estimatedArrival: "—",
-        notes: deliveryNote || "",
-        timeline: [
-          { step: "Order Placed", time: orderTime, done: true },
-          { step: "Preparing Order", time: "Pending", done: false },
-          { step: "Picked Up by Driver", time: "Pending", done: false },
-          { step: "Out for Delivery", time: "Pending", done: false },
-          { step: "Delivered", time: "Pending", done: false },
-        ],
-      }).catch(err => console.error("Failed to create delivery record:", err));
+        date: dateStr,
+        total: `P${total.toLocaleString()}`,
+        status: "Completed",
+      }).catch(err => console.error("Failed to save order:", err));
+
+      // 3. Create delivery record if fulfillment is delivery
+      if (fulfillment === "delivery") {
+        const now2 = new Date();
+        const scheduledDate = now2.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        const scheduledTime = now2.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+        const orderTime = now2.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+
+        api.createDelivery({
+          orderId: receiptNo,
+          customer: "Walk-in Customer",
+          phone: "—",
+          address: deliveryAddress || "No address provided",
+          items: itemsSummary,
+          scheduledDate,
+          scheduledTime,
+          driver: "Unassigned",
+          status: "Preparing",
+          estimatedArrival: "—",
+          notes: deliveryNote || "",
+          timeline: [
+            { step: "Order Placed", time: orderTime, done: true },
+            { step: "Preparing Order", time: "Pending", done: false },
+            { step: "Picked Up by Driver", time: "Pending", done: false },
+            { step: "Out for Delivery", time: "Pending", done: false },
+            { step: "Delivered", time: "Pending", done: false },
+          ],
+        }).catch(err => console.error("Failed to create delivery record:", err));
+      }
+
+      // 4. Refresh products list to reflect updated stock
+      try {
+        const updatedProducts = await api.getProducts();
+        setProducts(updatedProducts);
+      } catch (err) {
+        console.error("Failed to refresh products after sale:", err);
+      }
+
+      // Prepare receipt data
+      const receiptData: NonNullable<typeof lastReceipt> = {
+        items: cartSnapshot,
+        subtotal,
+        tax,
+        deliveryFee,
+        total,
+        fulfillment,
+        paymentMethod: paymentMethod ?? "cash",
+        cashReceived: paymentMethod === "cash" ? Number(cashReceived) : undefined,
+        change: paymentMethod === "cash" ? Number(cashReceived) - total : undefined,
+        date: dateStr,
+        time: timeStr,
+        receiptNo,
+      };
+
+      // Set last receipt
+      setLastReceipt(receiptData);
+
+      // Print receipt if auto print is enabled
+      if (autoPrintReceipt) {
+        printReceipt(receiptData);
+      }
+
+      setPaymentMethod(null);
+      setShowSuccess(true);
+      setCart([]);
+      setCardForm({ name: "", number: "", expiry: "", cvv: "" });
+      setGcashForm({ name: "", phone: "" });
+      setCashReceived("");
+      setDeliveryAddress("");
+      setDeliveryNote("");
+      setFulfillment("pickup");
+    } catch (err: any) {
+      console.error("POS Sale FAILED:", err);
+      setSaleError(err?.message || "Failed to process sale. Please try again.");
+    } finally {
+      setProcessingSale(false);
     }
-
-    // Prepare receipt data
-    const receiptData: NonNullable<typeof lastReceipt> = {
-      items: cart,
-      subtotal,
-      tax,
-      deliveryFee,
-      total,
-      fulfillment,
-      paymentMethod: paymentMethod ?? "cash",
-      cashReceived: paymentMethod === "cash" ? Number(cashReceived) : undefined,
-      change: paymentMethod === "cash" ? Number(cashReceived) - total : undefined,
-      date: dateStr,
-      time: timeStr,
-      receiptNo,
-    };
-
-    // Set last receipt
-    setLastReceipt(receiptData);
-
-    // Print receipt if auto print is enabled
-    if (autoPrintReceipt) {
-      printReceipt(receiptData);
-    }
-
-    setPaymentMethod(null);
-    setShowSuccess(true);
-    setCart([]);
-    setCardForm({ name: "", number: "", expiry: "", cvv: "" });
-    setGcashForm({ name: "", phone: "" });
-    setCashReceived("");
-    setDeliveryAddress("");
-    setDeliveryNote("");
-    setFulfillment("pickup");
   };
 
   return (
@@ -689,17 +717,22 @@ export default function PointOfSale() {
             <div className="flex items-center gap-3 mt-6">
               <button
                 onClick={() => setPaymentMethod(null)}
-                className="flex-1 px-6 py-3 border-[1.5px] border-[#ff4e00] text-[#ff4e00] rounded-lg hover:bg-[#fff5f0] transition-colors font-medium"
+                disabled={processingSale}
+                className="flex-1 px-6 py-3 border-[1.5px] border-[#ff4e00] text-[#ff4e00] rounded-lg hover:bg-[#fff5f0] transition-colors font-medium disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 onClick={handlePayment}
-                className="flex-1 px-6 py-3 bg-[#ff4e00] text-white rounded-lg hover:bg-[#e64600] transition-colors font-medium"
+                disabled={processingSale}
+                className="flex-1 px-6 py-3 bg-[#ff4e00] text-white rounded-lg hover:bg-[#e64600] transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                Confirm Payment
+                {processingSale ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : "Confirm Payment"}
               </button>
             </div>
+            {saleError && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-[13px]">{saleError}</div>
+            )}
           </div>
         </div>
       )}
@@ -783,17 +816,22 @@ export default function PointOfSale() {
             <div className="flex flex-col gap-2 mt-5">
               <button
                 onClick={handlePayment}
-                className="w-full px-6 py-3 bg-[#007dfe] text-white rounded-lg hover:bg-[#0066d1] transition-colors font-medium"
+                disabled={processingSale}
+                className="w-full px-6 py-3 bg-[#007dfe] text-white rounded-lg hover:bg-[#0066d1] transition-colors font-medium disabled:opacity-50 flex items-center justify-center gap-2"
               >
-                Confirm Payment
+                {processingSale ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : "Confirm Payment"}
               </button>
               <button
                 onClick={() => setPaymentMethod(null)}
-                className="w-full px-6 py-3 border-[1.5px] border-[#007dfe] text-[#007dfe] rounded-lg hover:bg-[#e8f4ff] transition-colors font-medium"
+                disabled={processingSale}
+                className="w-full px-6 py-3 border-[1.5px] border-[#007dfe] text-[#007dfe] rounded-lg hover:bg-[#e8f4ff] transition-colors font-medium disabled:opacity-50"
               >
                 Cancel
               </button>
             </div>
+            {saleError && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-[13px]">{saleError}</div>
+            )}
           </div>
         </div>
       )}
@@ -875,18 +913,22 @@ export default function PointOfSale() {
             <div className="flex flex-col gap-2 mt-6">
               <button
                 onClick={handlePayment}
-                disabled={!cashReceived || Number(cashReceived) < total}
-                className="w-full px-6 py-3 bg-[#2e7d32] text-white rounded-lg hover:bg-[#256b29] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={processingSale || !cashReceived || Number(cashReceived) < total}
+                className="w-full px-6 py-3 bg-[#2e7d32] text-white rounded-lg hover:bg-[#256b29] transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Confirm Payment
+                {processingSale ? <><Loader2 className="w-4 h-4 animate-spin" /> Processing...</> : "Confirm Payment"}
               </button>
               <button
                 onClick={() => setPaymentMethod(null)}
-                className="w-full px-6 py-3 border-[1.5px] border-[#2e7d32] text-[#2e7d32] rounded-lg hover:bg-[#e8f5e9] transition-colors font-medium"
+                disabled={processingSale}
+                className="w-full px-6 py-3 border-[1.5px] border-[#2e7d32] text-[#2e7d32] rounded-lg hover:bg-[#e8f5e9] transition-colors font-medium disabled:opacity-50"
               >
                 Cancel
               </button>
             </div>
+            {saleError && (
+              <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-[13px]">{saleError}</div>
+            )}
           </div>
         </div>
       )}
