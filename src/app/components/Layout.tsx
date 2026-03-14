@@ -12,6 +12,11 @@ export default function Layout() {
     if (!loading && !user) {
       navigate("/login", { replace: true });
     }
+    // If user is logged in but hasn't completed app verification, sign them out
+    // and redirect to signup so they can complete verification
+    if (!loading && user && user.user_metadata?.app_verified === false) {
+      navigate("/login", { replace: true });
+    }
   }, [user, loading, navigate]);
 
   if (loading) {
