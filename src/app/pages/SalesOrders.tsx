@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { ChevronLeft, ChevronRight, Eye, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ChevronLeft, ChevronRight, Eye, X, ArrowUpDown, ArrowUp, ArrowDown, Loader2, ShoppingBag } from "lucide-react";
+import * as api from "../lib/api";
 
 interface Order {
   id: string;
@@ -9,36 +10,6 @@ interface Order {
   total: string;
   status: "Completed" | "Pending" | "Processing" | "Cancelled";
 }
-
-const ROWS_PER_PAGE = 8;
-
-const initialOrders: Order[] = [
-  { id: "ORD-001", customer: "Mark Smith", items: "Red Roses Bouquet x2", date: "Mar 10, 2026", total: "P2,400", status: "Completed" },
-  { id: "ORD-002", customer: "Susan Anderson", items: "Sunflower Arrangement x1", date: "Mar 10, 2026", total: "P1,500", status: "Processing" },
-  { id: "ORD-003", customer: "Richard Mann", items: "Tulip Bouquet x3", date: "Mar 9, 2026", total: "P3,600", status: "Pending" },
-  { id: "ORD-004", customer: "Jason Marcus", items: "White Lily Set x1", date: "Mar 9, 2026", total: "P1,800", status: "Completed" },
-  { id: "ORD-005", customer: "David Johnson", items: "Orchid Pot x2", date: "Mar 8, 2026", total: "P4,200", status: "Completed" },
-  { id: "ORD-006", customer: "Michael Bain", items: "Peony Bouquet x1", date: "Mar 8, 2026", total: "P1,200", status: "Cancelled" },
-  { id: "ORD-007", customer: "Sarah Miller", items: "Mixed Wildflower x2", date: "Mar 7, 2026", total: "P2,000", status: "Processing" },
-  { id: "ORD-008", customer: "Ricky Jass", items: "Lavender Bundle x5", date: "Mar 7, 2026", total: "P2,500", status: "Pending" },
-  { id: "ORD-009", customer: "Elena Cruz", items: "Red Roses Bouquet x1", date: "Mar 6, 2026", total: "P1,200", status: "Completed" },
-  { id: "ORD-010", customer: "Tom Baker", items: "Sunflower Arrangement x2", date: "Mar 6, 2026", total: "P3,000", status: "Processing" },
-  { id: "ORD-011", customer: "Lisa Wong", items: "Tulip Bouquet x1", date: "Mar 5, 2026", total: "P1,200", status: "Completed" },
-  { id: "ORD-012", customer: "Carlos Reyes", items: "Orchid Pot x1", date: "Mar 5, 2026", total: "P2,100", status: "Pending" },
-  { id: "ORD-013", customer: "Angela Torres", items: "White Lily Set x2", date: "Mar 4, 2026", total: "P3,600", status: "Completed" },
-  { id: "ORD-014", customer: "Kevin Navarro", items: "Mixed Wildflower x3", date: "Mar 4, 2026", total: "P3,000", status: "Processing" },
-  { id: "ORD-015", customer: "Patricia Lim", items: "Peony Bouquet x2", date: "Mar 3, 2026", total: "P2,400", status: "Completed" },
-  { id: "ORD-016", customer: "Roberto Flores", items: "Lavender Bundle x4", date: "Mar 3, 2026", total: "P2,000", status: "Pending" },
-  { id: "ORD-017", customer: "Maria Santos", items: "Red Roses Bouquet x3", date: "Mar 2, 2026", total: "P3,600", status: "Completed" },
-  { id: "ORD-018", customer: "Antonio Garcia", items: "Sunflower Arrangement x1", date: "Mar 2, 2026", total: "P1,500", status: "Cancelled" },
-  { id: "ORD-019", customer: "Sophia Chen", items: "Tulip Bouquet x2", date: "Mar 1, 2026", total: "P2,400", status: "Processing" },
-  { id: "ORD-020", customer: "Daniel Park", items: "Orchid Pot x1", date: "Mar 1, 2026", total: "P2,100", status: "Completed" },
-  { id: "ORD-021", customer: "Grace Villanueva", items: "White Lily Set x1", date: "Feb 28, 2026", total: "P1,800", status: "Pending" },
-  { id: "ORD-022", customer: "Brian Mendoza", items: "Peony Bouquet x3", date: "Feb 28, 2026", total: "P3,600", status: "Completed" },
-  { id: "ORD-023", customer: "Catherine Ramos", items: "Mixed Wildflower x1", date: "Feb 27, 2026", total: "P1,000", status: "Completed" },
-  { id: "ORD-024", customer: "James Ortega", items: "Lavender Bundle x6", date: "Feb 27, 2026", total: "P3,000", status: "Processing" },
-  { id: "ORD-025", customer: "Natalie Rivera", items: "Red Roses Bouquet x2", date: "Feb 26, 2026", total: "P2,400", status: "Completed" },
-];
 
 const statusColors: Record<Order["status"], string> = {
   Completed: "bg-[#e8f5e9] text-[#2e7d32]",
@@ -51,10 +22,27 @@ type SortKey = "id" | "customer" | "items" | "date" | "total" | "status";
 type SortDir = "asc" | "desc" | null;
 
 export default function SalesOrders() {
-  const [orders] = useState<Order[]>(initialOrders);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
   const [detailOrder, setDetailOrder] = useState<Order | null>(null);
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
+
+  useEffect(() => {
+    loadOrders();
+  }, []);
+
+  const loadOrders = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getOrders();
+      setOrders(data);
+    } catch (err) {
+      console.error("Failed to load orders:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -85,13 +73,24 @@ export default function SalesOrders() {
     return sortDir === "asc" ? <ArrowUp className="w-4 h-4 ml-1 inline" /> : <ArrowDown className="w-4 h-4 ml-1 inline" />;
   };
 
-  const totalSales = "P19,200";
+  const totalSales = orders
+    .filter(o => o.status === "Completed")
+    .reduce((sum, o) => sum + Number(String(o.total).replace(/[^0-9]/g, "")), 0);
   const completedOrders = orders.filter(o => o.status === "Completed").length;
   const pendingOrders = orders.filter(o => o.status === "Pending").length;
 
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-[#ff4e00] animate-spin" />
+        <span className="ml-3 text-[#5d5d5d] text-[16px]">Loading orders...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col max-w-[1400px] mx-auto px-4 sm:px-8 py-4 sm:py-5">
-      {/* Header with pagination */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <h1 className="text-[#ff4e00] text-[24px] sm:text-[32px] font-medium tracking-[-0.64px]">Sales & Orders</h1>
       </div>
@@ -100,7 +99,7 @@ export default function SalesOrders() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 mb-4 flex-shrink-0">
         <div className="bg-white rounded-[12px] border border-[#e9e9e9] p-4">
           <p className="text-[#5d5d5d] text-[13px] mb-1">Total Sales</p>
-          <p className="text-[#ff4e00] text-[26px] font-semibold">{totalSales}</p>
+          <p className="text-[#ff4e00] text-[26px] font-semibold">P{totalSales.toLocaleString()}</p>
         </div>
         <div className="bg-white rounded-[12px] border border-[#e9e9e9] p-4">
           <p className="text-[#5d5d5d] text-[13px] mb-1">Completed Orders</p>
@@ -128,28 +127,42 @@ export default function SalesOrders() {
               </tr>
             </thead>
             <tbody>
-              {sortedOrders.map((order, index) => (
-                <tr key={order.id} className={index % 2 === 0 ? "bg-[#f6f6f6]" : "bg-white"}>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{order.id}</td>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{order.customer}</td>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{order.items}</td>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{order.date}</td>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{order.total}</td>
-                  <td className="px-6 py-3.5">
-                    <span className={`px-3 py-1 rounded-full text-[12px] font-medium ${statusColors[order.status]}`}>
-                      {order.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-3.5 text-right">
-                    <button
-                      onClick={() => setDetailOrder(order)}
-                      className="px-4 py-1.5 text-[#ff4e00] border border-[#ff4e00] rounded-[5px] hover:bg-[#fff5f0] transition-colors text-[13px] font-semibold"
-                    >
-                      Details
-                    </button>
+              {sortedOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="text-center py-16">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-full bg-[#fff5f0] flex items-center justify-center mb-1">
+                        <ShoppingBag className="w-6 h-6 text-[#ff4e00]" />
+                      </div>
+                      <p className="text-[#383838] text-[16px] font-medium">No data available</p>
+                      <p className="text-[#999] text-[13px]">Orders will appear here once created</p>
+                    </div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                sortedOrders.map((order, index) => (
+                  <tr key={order.id} className={index % 2 === 0 ? "bg-[#f6f6f6]" : "bg-white"}>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{order.id}</td>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{order.customer}</td>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{order.items}</td>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{order.date}</td>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{order.total}</td>
+                    <td className="px-6 py-3.5">
+                      <span className={`px-3 py-1 rounded-full text-[12px] font-medium ${statusColors[order.status]}`}>
+                        {order.status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-3.5 text-right">
+                      <button
+                        onClick={() => setDetailOrder(order)}
+                        className="px-4 py-1.5 text-[#ff4e00] border border-[#ff4e00] rounded-[5px] hover:bg-[#fff5f0] transition-colors text-[13px] font-semibold"
+                      >
+                        Details
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>

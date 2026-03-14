@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { ChevronLeft, ChevronRight, X, Calendar, Users, MapPin, Clock, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { useState, useEffect } from "react";
+import { ChevronLeft, ChevronRight, X, Calendar, Users, MapPin, Clock, ArrowUpDown, ArrowUp, ArrowDown, Loader2, Plus } from "lucide-react";
 import { Link } from "react-router";
+import * as api from "../lib/api";
 
 interface Workshop {
   id: number;
@@ -15,40 +16,34 @@ interface Workshop {
   duration: string;
 }
 
-const ROWS_PER_PAGE = 8;
-
 export default function Workshops() {
-  const [workshops, setWorkshops] = useState<Workshop[]>([
-    { id: 1, title: "Flower Arrangement Workshop", date: "Oct. 20, 2025 - 10PM", capacity: 20, spotsLeft: 11, price: "P50", description: "Learn the art of flower arrangement with fresh seasonal blooms. Perfect for beginners who want to create stunning centerpieces.", location: "Main Studio, 2nd Floor", instructor: "Maria Santos", duration: "2 hours" },
-    { id: 2, title: "Flower Growing Workshop", date: "Oct. 20, 2025 - 10PM", capacity: 30, spotsLeft: 5, price: "P100", description: "Discover the secrets to growing beautiful flowers at home. Covers soil preparation, watering techniques, and seasonal planting.", location: "Garden Area", instructor: "Juan Dela Cruz", duration: "3 hours" },
-    { id: 3, title: "Flower Arrangement Workshop", date: "Oct. 20, 2025 - 10PM", capacity: 50, spotsLeft: 45, price: "P75", description: "An intermediate workshop focused on modern arrangement styles including ikebana-inspired and free-form designs.", location: "Main Studio, 2nd Floor", instructor: "Maria Santos", duration: "2.5 hours" },
-    { id: 4, title: "Flower Growing Workshop", date: "Oct. 20, 2025 - 10PM", capacity: 20, spotsLeft: 10, price: "P80", description: "Hands-on workshop covering propagation methods and care for tropical flowers native to the Philippines.", location: "Garden Area", instructor: "Juan Dela Cruz", duration: "2 hours" },
-    { id: 5, title: "Flower Arrangement Workshop", date: "Oct. 20, 2025 - 10PM", capacity: 10, spotsLeft: 6, price: "P100", description: "Small group premium workshop with personal instruction on bridal bouquet arrangement techniques.", location: "VIP Room", instructor: "Rosa Gonzales", duration: "3 hours" },
-    { id: 6, title: "Flower Growing Workshop", date: "Oct. 20, 2025 - 10PM", capacity: 30, spotsLeft: 3, price: "P50", description: "Learn how to grow roses, sunflowers, and orchids. Includes a take-home starter kit.", location: "Garden Area", instructor: "Juan Dela Cruz", duration: "2 hours" },
-    { id: 7, title: "Flower Arrangement Workshop", date: "Oct. 20, 2025 - 10PM", capacity: 20, spotsLeft: 12, price: "P60", description: "Create your own dried flower arrangement to take home. All materials provided.", location: "Main Studio, 2nd Floor", instructor: "Maria Santos", duration: "1.5 hours" },
-    { id: 8, title: "Flower Growing Workshop", date: "Oct. 20, 2025 - 10PM", capacity: 50, spotsLeft: 40, price: "P75", description: "Community workshop on urban gardening with flowers. Great for apartment dwellers.", location: "Rooftop Garden", instructor: "Ana Reyes", duration: "2 hours" },
-    { id: 9, title: "Bouquet Design Workshop", date: "Nov. 5, 2025 - 2PM", capacity: 15, spotsLeft: 8, price: "P120", description: "Design your own signature bouquet with premium imported flowers and local blooms.", location: "Main Studio, 2nd Floor", instructor: "Rosa Gonzales", duration: "2.5 hours" },
-    { id: 10, title: "Dried Flower Art Workshop", date: "Nov. 10, 2025 - 3PM", capacity: 25, spotsLeft: 20, price: "P90", description: "Create beautiful wall art and decor using dried and preserved flowers.", location: "Art Room", instructor: "Maria Santos", duration: "2 hours" },
-    { id: 11, title: "Wedding Floral Design", date: "Nov. 15, 2025 - 9AM", capacity: 12, spotsLeft: 4, price: "P200", description: "Professional-level workshop on wedding floral design including bouquets, centerpieces, and arches.", location: "VIP Room", instructor: "Rosa Gonzales", duration: "4 hours" },
-    { id: 12, title: "Succulent Potting Class", date: "Nov. 18, 2025 - 1PM", capacity: 20, spotsLeft: 15, price: "P85", description: "Learn to pot and arrange succulents in decorative containers. Take your creation home!", location: "Garden Area", instructor: "Ana Reyes", duration: "1.5 hours" },
-    { id: 13, title: "Ikebana Basics Workshop", date: "Nov. 22, 2025 - 10AM", capacity: 10, spotsLeft: 7, price: "P150", description: "Introduction to the Japanese art of flower arrangement. Minimalist and meditative.", location: "Main Studio, 2nd Floor", instructor: "Maria Santos", duration: "2 hours" },
-    { id: 14, title: "Flower Preservation Class", date: "Nov. 25, 2025 - 2PM", capacity: 18, spotsLeft: 12, price: "P110", description: "Techniques for preserving flowers including pressing, drying, and resin casting.", location: "Art Room", instructor: "Juan Dela Cruz", duration: "2.5 hours" },
-    { id: 15, title: "Holiday Wreath Making", date: "Dec. 1, 2025 - 10AM", capacity: 25, spotsLeft: 18, price: "P130", description: "Create a festive holiday wreath using fresh greens, flowers, and seasonal decorations.", location: "Main Studio, 2nd Floor", instructor: "Rosa Gonzales", duration: "2 hours" },
-    { id: 16, title: "Corsage & Boutonniere", date: "Dec. 5, 2025 - 3PM", capacity: 15, spotsLeft: 9, price: "P95", description: "Learn to make elegant corsages and boutonnieres for prom, weddings, and special occasions.", location: "VIP Room", instructor: "Maria Santos", duration: "1.5 hours" },
-    { id: 17, title: "Flower Photography Tips", date: "Dec. 10, 2025 - 11AM", capacity: 30, spotsLeft: 25, price: "P60", description: "Photography workshop focused on capturing flowers beautifully. Bring your own camera or phone.", location: "Garden Area", instructor: "Ana Reyes", duration: "2 hours" },
-    { id: 18, title: "Advanced Arrangement", date: "Dec. 15, 2025 - 9AM", capacity: 10, spotsLeft: 2, price: "P250", description: "For experienced arrangers only. Master complex techniques and large-scale installations.", location: "Main Studio, 2nd Floor", instructor: "Rosa Gonzales", duration: "4 hours" },
-    { id: 19, title: "Terrarium Building", date: "Dec. 18, 2025 - 1PM", capacity: 20, spotsLeft: 14, price: "P140", description: "Build your own miniature garden terrarium with mosses, ferns, and small flowers.", location: "Art Room", instructor: "Juan Dela Cruz", duration: "2 hours" },
-    { id: 20, title: "Valentine's Day Prep", date: "Jan. 10, 2026 - 10AM", capacity: 40, spotsLeft: 35, price: "P75", description: "Get ready for Valentine's Day! Learn to make romantic bouquets and heart-shaped arrangements.", location: "Main Studio, 2nd Floor", instructor: "Maria Santos", duration: "2 hours" },
-  ]);
+  const [workshops, setWorkshops] = useState<Workshop[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
-  const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [detailWorkshop, setDetailWorkshop] = useState<Workshop | null>(null);
   const [newWorkshop, setNewWorkshop] = useState({ title: "", date: "", capacity: "", spots: "", price: "" });
-  const [sortKey, setSortKey] = useState<"title" | "date" | "capacity" | "spotsLeft" | "price" | null>(null);
+  const [sortKey, setSortKey] = useState<WSortKey | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc" | null>(null);
 
   type WSortKey = "title" | "date" | "capacity" | "spotsLeft" | "price";
+
+  useEffect(() => {
+    loadWorkshops();
+  }, []);
+
+  const loadWorkshops = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getWorkshops();
+      setWorkshops(data);
+    } catch (err) {
+      console.error("Failed to load workshops:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSort = (key: WSortKey) => {
     if (sortKey === key) {
@@ -80,17 +75,11 @@ export default function Workshops() {
     return sortDir === "asc" ? <ArrowUp className="w-4 h-4 ml-1 inline" /> : <ArrowDown className="w-4 h-4 ml-1 inline" />;
   };
 
-  const totalPages = Math.ceil(workshops.length / ROWS_PER_PAGE);
-  const startIdx = (page - 1) * ROWS_PER_PAGE;
-  const endIdx = Math.min(startIdx + ROWS_PER_PAGE, workshops.length);
-  const paged = sortedWorkshops.slice(startIdx, endIdx);
-
-  const handleCreateWorkshop = () => {
+  const handleCreateWorkshop = async () => {
     if (newWorkshop.title && newWorkshop.date && newWorkshop.capacity && newWorkshop.spots && newWorkshop.price) {
-      setWorkshops([
-        ...workshops,
-        {
-          id: Date.now(),
+      try {
+        setSaving(true);
+        await api.createWorkshop({
           title: newWorkshop.title,
           date: newWorkshop.date,
           capacity: parseInt(newWorkshop.capacity),
@@ -100,16 +89,30 @@ export default function Workshops() {
           location: "",
           instructor: "",
           duration: "",
-        },
-      ]);
-      setNewWorkshop({ title: "", date: "", capacity: "", spots: "", price: "" });
-      setIsModalOpen(false);
+        });
+        await loadWorkshops();
+        setNewWorkshop({ title: "", date: "", capacity: "", spots: "", price: "" });
+        setIsModalOpen(false);
+      } catch (err) {
+        console.error("Failed to create workshop:", err);
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-[#ff4e00] animate-spin" />
+        <span className="ml-3 text-[#5d5d5d] text-[16px]">Loading workshops...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="h-full flex flex-col max-w-[1400px] mx-auto px-4 sm:px-8 py-4 sm:py-5">
-      {/* Header with pagination */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3 flex-shrink-0">
         <h1 className="text-[#ff4e00] text-[24px] sm:text-[32px] font-medium tracking-[-0.64px]">Workshops</h1>
         <div className="flex items-center gap-6">
@@ -137,31 +140,45 @@ export default function Workshops() {
               </tr>
             </thead>
             <tbody>
-              {sortedWorkshops.map((workshop, index) => (
-                <tr key={workshop.id} className={index % 2 === 0 ? "bg-[#f6f6f6]" : "bg-white"}>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{workshop.title}</td>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{workshop.date}</td>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{workshop.capacity} People</td>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{workshop.spotsLeft} Spots</td>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{workshop.price}</td>
-                  <td className="px-6 py-3.5">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => setDetailWorkshop(workshop)}
-                        className="px-4 py-1.5 text-[#ff4e00] border border-[#ff4e00] rounded-[5px] hover:bg-[#fff5f0] transition-colors text-[13px] font-semibold"
-                      >
-                        Details
-                      </button>
-                      <Link
-                        to={`/workshops/${workshop.id}/register`}
-                        className="px-4 py-1.5 bg-[#ff4e00] text-white rounded-[5px] hover:bg-[#e64600] transition-colors text-[13px] font-semibold"
-                      >
-                        Register
-                      </Link>
+              {sortedWorkshops.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="text-center py-16">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-full bg-[#fff5f0] flex items-center justify-center mb-1">
+                        <Calendar className="w-6 h-6 text-[#ff4e00]" />
+                      </div>
+                      <p className="text-[#383838] text-[16px] font-medium">No data available</p>
+                      <p className="text-[#999] text-[13px]">Click "Create Workshop" to get started</p>
                     </div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                sortedWorkshops.map((workshop, index) => (
+                  <tr key={workshop.id} className={index % 2 === 0 ? "bg-[#f6f6f6]" : "bg-white"}>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{workshop.title}</td>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{workshop.date}</td>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{workshop.capacity} People</td>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{workshop.spotsLeft} Spots</td>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{workshop.price}</td>
+                    <td className="px-6 py-3.5">
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setDetailWorkshop(workshop)}
+                          className="px-4 py-1.5 text-[#ff4e00] border border-[#ff4e00] rounded-[5px] hover:bg-[#fff5f0] transition-colors text-[13px] font-semibold"
+                        >
+                          Details
+                        </button>
+                        <Link
+                          to={`/workshops/${workshop.id}/register`}
+                          className="px-4 py-1.5 bg-[#ff4e00] text-white rounded-[5px] hover:bg-[#e64600] transition-colors text-[13px] font-semibold"
+                        >
+                          Register
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
@@ -208,7 +225,9 @@ export default function Workshops() {
             </div>
             <div className="flex items-center gap-3 mt-6">
               <button onClick={() => setIsModalOpen(false)} className="flex-1 px-6 py-3 border-[1.5px] border-[#ff4e00] text-[#ff4e00] rounded-lg hover:bg-[#fff5f0] transition-colors font-medium">Cancel</button>
-              <button onClick={handleCreateWorkshop} className="flex-1 px-6 py-3 bg-[#ff4e00] text-white rounded-lg hover:bg-[#e64600] transition-colors font-medium">Create</button>
+              <button onClick={handleCreateWorkshop} disabled={saving} className="flex-1 px-6 py-3 bg-[#ff4e00] text-white rounded-lg hover:bg-[#e64600] transition-colors font-medium disabled:opacity-50">
+                {saving ? "Creating..." : "Create"}
+              </button>
             </div>
           </div>
         </div>
@@ -224,15 +243,11 @@ export default function Workshops() {
                 <X className="w-5 h-5" />
               </button>
             </div>
-
             <div className="space-y-4">
-              {/* Title */}
               <div>
                 <h3 className="text-[#383838] text-[20px] font-semibold">{detailWorkshop.title}</h3>
                 <p className="text-[#5d5d5d] text-[14px] mt-1">{detailWorkshop.description}</p>
               </div>
-
-              {/* Info Grid */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-[#fff5f0] rounded-lg p-3 flex items-start gap-3">
                   <Calendar className="w-5 h-5 text-[#ff4e00] flex-shrink-0 mt-0.5" />
@@ -263,8 +278,6 @@ export default function Workshops() {
                   </div>
                 </div>
               </div>
-
-              {/* Capacity & Price Bar */}
               <div className="flex items-center gap-4 bg-[#f6f6f6] rounded-lg p-4">
                 <div className="flex-1">
                   <p className="text-[#5d5d5d] text-[12px]">Capacity</p>
@@ -281,8 +294,6 @@ export default function Workshops() {
                   <p className="text-[#ff4e00] text-[16px] font-semibold">{detailWorkshop.price}</p>
                 </div>
               </div>
-
-              {/* Progress Bar */}
               <div>
                 <div className="flex justify-between text-[12px] mb-1">
                   <span className="text-[#5d5d5d]">Registration Progress</span>
@@ -296,20 +307,9 @@ export default function Workshops() {
                 </div>
               </div>
             </div>
-
             <div className="flex items-center gap-3 mt-6">
-              <button
-                onClick={() => setDetailWorkshop(null)}
-                className="flex-1 px-6 py-3 border-[1.5px] border-[#ff4e00] text-[#ff4e00] rounded-lg hover:bg-[#fff5f0] transition-colors font-medium"
-              >
-                Close
-              </button>
-              <Link
-                to={`/workshops/${detailWorkshop.id}/register`}
-                className="flex-1 px-6 py-3 bg-[#ff4e00] text-white rounded-lg hover:bg-[#e64600] transition-colors font-medium text-center"
-              >
-                Register Customers
-              </Link>
+              <button onClick={() => setDetailWorkshop(null)} className="flex-1 px-6 py-3 border-[1.5px] border-[#ff4e00] text-[#ff4e00] rounded-lg hover:bg-[#fff5f0] transition-colors font-medium">Close</button>
+              <Link to={`/workshops/${detailWorkshop.id}/register`} className="flex-1 px-6 py-3 bg-[#ff4e00] text-white rounded-lg hover:bg-[#e64600] transition-colors font-medium text-center">Register Customers</Link>
             </div>
           </div>
         </div>

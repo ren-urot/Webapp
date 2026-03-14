@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router";
-import { Eye, EyeOff, Mail, Lock } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
 import svgPaths from "../../imports/svg-vr1w7212pc";
+import { supabase } from "../lib/supabase";
+import * as api from "../lib/api";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -10,8 +12,18 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // If already logged in, redirect to dashboard
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        navigate("/", { replace: true });
+      }
+    });
+  }, [navigate]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -20,8 +32,46 @@ export default function Login() {
       return;
     }
 
-    // Navigate to dashboard on successful login
-    navigate("/");
+    try {
+      setLoading(true);
+      console.log("Attempting login for:", email);
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (authError) {
+        console.error("Login error:", authError.message);
+        if (authError.message.includes("Invalid login credentials") || authError.message.includes("Email not confirmed")) {
+          // Check if the user exists but hasn't verified their email
+          try {
+            const check = await api.loginCheck(email);
+            if (check.exists && !check.verified) {
+              setError("Your email hasn't been verified yet. Please complete the signup process to verify your email, or sign up again to get a new verification code.");
+            } else if (!check.exists) {
+              setError("No account found with this email. Please sign up first.");
+            } else {
+              setError("Invalid password. Please check your credentials and try again.");
+            }
+          } catch {
+            setError("Invalid email or password. Please check your credentials or sign up for a new account.");
+          }
+        } else {
+          setError(authError.message);
+        }
+        return;
+      }
+
+      if (data.session) {
+        console.log("Login successful, user:", data.user?.email);
+        navigate("/");
+      }
+    } catch (err: any) {
+      console.error("Unexpected login error:", err);
+      setError("An unexpected error occurred. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -35,9 +85,6 @@ export default function Login() {
         />
         <div className="absolute inset-0 bg-[#ff4e00]/40" />
         <div className="absolute bottom-12 left-10 right-10 text-center">
-          <h2 className="text-white text-[32px] font-semibold mb-2">
-            Welcome to Bloom
-          </h2>
           <p className="text-white/90 text-[16px]">
             Manage your flowershop with ease. Track sales, inventory, workshops, and customers all in one place.
           </p>
@@ -99,6 +146,7 @@ export default function Login() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="john@bloomshop.com"
                   className="w-full pl-11 pr-4 py-3 bg-[#f6f6f6] border border-[#e0e0e0] rounded-lg text-[#383838] text-[15px] placeholder:text-[#b0b0b0] focus:outline-none focus:border-[#ff4e00] focus:ring-1 focus:ring-[#ff4e00] transition-colors"
+                  disabled={loading}
                 />
               </div>
             </div>
@@ -116,6 +164,7 @@ export default function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="Enter your password"
                   className="w-full pl-11 pr-12 py-3 bg-[#f6f6f6] border border-[#e0e0e0] rounded-lg text-[#383838] text-[15px] placeholder:text-[#b0b0b0] focus:outline-none focus:border-[#ff4e00] focus:ring-1 focus:ring-[#ff4e00] transition-colors"
+                  disabled={loading}
                 />
                 <button
                   type="button"
@@ -146,9 +195,17 @@ export default function Login() {
             {/* Submit */}
             <button
               type="submit"
-              className="w-full py-3.5 bg-[#ff4e00] text-white rounded-lg hover:bg-[#e64600] transition-colors font-semibold text-[16px] shadow-sm"
+              disabled={loading}
+              className="w-full py-3.5 bg-[#ff4e00] text-white rounded-lg hover:bg-[#e64600] transition-colors font-semibold text-[16px] shadow-sm disabled:opacity-60 flex items-center justify-center gap-2"
             >
-              Log In
+              {loading ? (
+                <>
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Logging in...
+                </>
+              ) : (
+                "Log In"
+              )}
             </button>
           </form>
 

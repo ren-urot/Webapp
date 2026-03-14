@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Pencil, Trash2, ChevronLeft, ChevronRight, Plus, X, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Pencil, Trash2, ChevronLeft, ChevronRight, Plus, X, ArrowUpDown, ArrowUp, ArrowDown, Loader2 } from "lucide-react";
+import * as api from "../lib/api";
 
 interface Customer {
   id: number;
@@ -8,42 +9,38 @@ interface Customer {
   phone: string;
 }
 
+type SortKey = "name" | "email" | "phone";
+type SortDir = "asc" | "desc" | null;
+
 const ROWS_PER_PAGE = 8;
 
 export default function Customers() {
-  const [customers, setCustomers] = useState<Customer[]>([
-    { id: 1, name: "Mark Smith", email: "mark.smith@gmail.com", phone: "1+ 23 4567 890" },
-    { id: 2, name: "Susan Anderson", email: "susananderson@gmail.com", phone: "1+ 23 4567 890" },
-    { id: 3, name: "Richard Mann", email: "richard.mann@gmail.com", phone: "1+ 23 4567 890" },
-    { id: 4, name: "Jason Marcus", email: "jason.marcus@gmail.com", phone: "1+ 23 4567 890" },
-    { id: 5, name: "David Johnson", email: "davidjohnson@gmail.com", phone: "1+ 23 4567 890" },
-    { id: 6, name: "Michael Bain", email: "michael.bain@gmail.com", phone: "1+ 23 4567 890" },
-    { id: 7, name: "Ricky Jass", email: "ricky.jass@gmail.com", phone: "1+ 23 4567 890" },
-    { id: 8, name: "Sarah Miller", email: "sarah.miller@gmail.com", phone: "1+ 23 4567 890" },
-    { id: 9, name: "Elena Cruz", email: "elena.cruz@gmail.com", phone: "1+ 23 4567 890" },
-    { id: 10, name: "Tom Baker", email: "tom.baker@gmail.com", phone: "1+ 23 4567 890" },
-    { id: 11, name: "Lisa Wong", email: "lisa.wong@gmail.com", phone: "1+ 23 4567 890" },
-    { id: 12, name: "Carlos Reyes", email: "carlos.reyes@gmail.com", phone: "1+ 23 4567 890" },
-    { id: 13, name: "Angela Torres", email: "angela.torres@gmail.com", phone: "1+ 23 4567 891" },
-    { id: 14, name: "Kevin Navarro", email: "kevin.navarro@gmail.com", phone: "1+ 23 4567 892" },
-    { id: 15, name: "Patricia Lim", email: "patricia.lim@gmail.com", phone: "1+ 23 4567 893" },
-    { id: 16, name: "Roberto Flores", email: "roberto.flores@gmail.com", phone: "1+ 23 4567 894" },
-    { id: 17, name: "Maria Santos", email: "maria.santos@gmail.com", phone: "1+ 23 4567 895" },
-    { id: 18, name: "Antonio Garcia", email: "antonio.garcia@gmail.com", phone: "1+ 23 4567 896" },
-    { id: 19, name: "Sophia Chen", email: "sophia.chen@gmail.com", phone: "1+ 23 4567 897" },
-    { id: 20, name: "Daniel Park", email: "daniel.park@gmail.com", phone: "1+ 23 4567 898" },
-    { id: 21, name: "Grace Villanueva", email: "grace.villanueva@gmail.com", phone: "1+ 23 4567 899" },
-    { id: 22, name: "Brian Mendoza", email: "brian.mendoza@gmail.com", phone: "1+ 23 4567 900" },
-    { id: 23, name: "Catherine Ramos", email: "catherine.ramos@gmail.com", phone: "1+ 23 4567 901" },
-    { id: 24, name: "James Ortega", email: "james.ortega@gmail.com", phone: "1+ 23 4567 902" },
-    { id: 25, name: "Natalie Rivera", email: "natalie.rivera@gmail.com", phone: "1+ 23 4567 903" },
-  ]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const [page, setPage] = useState(1);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [newCustomer, setNewCustomer] = useState({ name: "", email: "", phone: "" });
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>(null);
+
+  useEffect(() => {
+    loadCustomers();
+  }, []);
+
+  const loadCustomers = async () => {
+    try {
+      setLoading(true);
+      const data = await api.getCustomers();
+      setCustomers(data);
+    } catch (err) {
+      console.error("Failed to load customers:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -67,35 +64,80 @@ export default function Customers() {
     return sortDir === "asc" ? <ArrowUp className="w-4 h-4 ml-1 inline" /> : <ArrowDown className="w-4 h-4 ml-1 inline" />;
   };
 
-  const totalPages = Math.ceil(customers.length / ROWS_PER_PAGE);
-  const startIdx = (page - 1) * ROWS_PER_PAGE;
-  const endIdx = Math.min(startIdx + ROWS_PER_PAGE, customers.length);
-  const paged = sortedCustomers.slice(startIdx, endIdx);
-
-  const handleAddCustomer = () => {
+  const handleAddCustomer = async () => {
     if (newCustomer.name && newCustomer.email && newCustomer.phone) {
-      setCustomers([...customers, { ...newCustomer, id: Date.now() }]);
-      setNewCustomer({ name: "", email: "", phone: "" });
-      setIsModalOpen(false);
-      setPage(Math.ceil((customers.length + 1) / ROWS_PER_PAGE));
+      try {
+        setSaving(true);
+        await api.createCustomer(newCustomer);
+        await loadCustomers();
+        setNewCustomer({ name: "", email: "", phone: "" });
+        setIsModalOpen(false);
+        setPage(Math.ceil((customers.length + 1) / ROWS_PER_PAGE));
+      } catch (err) {
+        console.error("Failed to add customer:", err);
+      } finally {
+        setSaving(false);
+      }
     }
   };
 
-  const handleDeleteCustomer = (id: number) => {
-    const updated = customers.filter(c => c.id !== id);
-    setCustomers(updated);
-    const newTotalPages = Math.ceil(updated.length / ROWS_PER_PAGE);
-    if (page > newTotalPages && newTotalPages > 0) setPage(newTotalPages);
+  const handleEditCustomer = async () => {
+    if (editingCustomer && newCustomer.name && newCustomer.email && newCustomer.phone) {
+      try {
+        setSaving(true);
+        await api.updateCustomer(editingCustomer.id, newCustomer);
+        await loadCustomers();
+        setNewCustomer({ name: "", email: "", phone: "" });
+        setEditingCustomer(null);
+        setIsModalOpen(false);
+      } catch (err) {
+        console.error("Failed to edit customer:", err);
+      } finally {
+        setSaving(false);
+      }
+    }
   };
+
+  const handleDeleteCustomer = async (id: number) => {
+    try {
+      await api.deleteCustomer(id);
+      await loadCustomers();
+      const newTotalPages = Math.ceil((customers.length - 1) / ROWS_PER_PAGE);
+      if (page > newTotalPages && newTotalPages > 0) setPage(newTotalPages);
+    } catch (err) {
+      console.error("Failed to delete customer:", err);
+    }
+  };
+
+  const openEditModal = (customer: Customer) => {
+    setEditingCustomer(customer);
+    setNewCustomer({ name: customer.name, email: customer.email, phone: customer.phone });
+    setIsModalOpen(true);
+  };
+
+  const openAddModal = () => {
+    setEditingCustomer(null);
+    setNewCustomer({ name: "", email: "", phone: "" });
+    setIsModalOpen(true);
+  };
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-[#ff4e00] animate-spin" />
+        <span className="ml-3 text-[#5d5d5d] text-[16px]">Loading customers...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col max-w-[1400px] mx-auto px-4 sm:px-8 py-4 sm:py-6">
-      {/* Header with pagination */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-3 flex-shrink-0">
         <h1 className="text-[#ff4e00] text-[24px] sm:text-[32px] font-medium tracking-[-0.64px]">Customers</h1>
         <div className="flex items-center gap-6">
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={openAddModal}
             className="flex items-center gap-2 px-5 py-2.5 bg-white text-[#ff4e00] border-[1.5px] border-[#ff4e00] rounded-lg hover:bg-[#ff4e00] hover:text-white transition-colors font-medium text-[14px]"
           >
             <Plus className="w-4 h-4" />
@@ -117,37 +159,56 @@ export default function Customers() {
               </tr>
             </thead>
             <tbody>
-              {sortedCustomers.map((customer, index) => (
-                <tr key={customer.id} className={index % 2 === 0 ? "bg-[#f6f6f6]" : "bg-white"}>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{customer.name}</td>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{customer.email}</td>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{customer.phone}</td>
-                  <td className="px-6 py-3.5">
-                    <div className="flex items-center gap-2">
-                      <button className="px-4 py-1.5 text-[#ff4e00] border border-[#ff4e00] rounded-[5px] hover:bg-[#fff5f0] transition-colors text-[13px] font-semibold">
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDeleteCustomer(customer.id)}
-                        className="px-4 py-1.5 bg-[#ff4e00] text-white rounded-[5px] hover:bg-[#e64600] transition-colors text-[13px] font-semibold"
-                      >
-                        Delete
-                      </button>
+              {sortedCustomers.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="text-center py-16">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-full bg-[#fff5f0] flex items-center justify-center mb-1">
+                        <Plus className="w-6 h-6 text-[#ff4e00]" />
+                      </div>
+                      <p className="text-[#383838] text-[16px] font-medium">No data available</p>
+                      <p className="text-[#999] text-[13px]">Click "Add Customer" to get started</p>
                     </div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                sortedCustomers.map((customer, index) => (
+                  <tr key={customer.id} className={index % 2 === 0 ? "bg-[#f6f6f6]" : "bg-white"}>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{customer.name}</td>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{customer.email}</td>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{customer.phone}</td>
+                    <td className="px-6 py-3.5">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => openEditModal(customer)}
+                          className="px-4 py-1.5 text-[#ff4e00] border border-[#ff4e00] rounded-[5px] hover:bg-[#fff5f0] transition-colors text-[13px] font-semibold"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCustomer(customer.id)}
+                          className="px-4 py-1.5 bg-[#ff4e00] text-white rounded-[5px] hover:bg-[#e64600] transition-colors text-[13px] font-semibold"
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* Add Customer Modal */}
+      {/* Add/Edit Customer Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-[#ff4e00] text-[24px] font-semibold">+ Add Customer</h2>
+              <h2 className="text-[#ff4e00] text-[24px] font-semibold">
+                {editingCustomer ? "Edit Customer" : "+ Add Customer"}
+              </h2>
               <button onClick={() => setIsModalOpen(false)} className="text-[#5d5d5d] hover:text-[#ff4e00]">
                 <X className="w-5 h-5" />
               </button>
@@ -168,7 +229,13 @@ export default function Customers() {
             </div>
             <div className="flex items-center gap-3 mt-6">
               <button onClick={() => setIsModalOpen(false)} className="flex-1 px-6 py-3 border-[1.5px] border-[#ff4e00] text-[#ff4e00] rounded-lg hover:bg-[#fff5f0] transition-colors font-medium">Cancel</button>
-              <button onClick={handleAddCustomer} className="flex-1 px-6 py-3 bg-[#ff4e00] text-white rounded-lg hover:bg-[#e64600] transition-colors font-medium">Save</button>
+              <button
+                onClick={editingCustomer ? handleEditCustomer : handleAddCustomer}
+                disabled={saving}
+                className="flex-1 px-6 py-3 bg-[#ff4e00] text-white rounded-lg hover:bg-[#e64600] transition-colors font-medium disabled:opacity-50"
+              >
+                {saving ? "Saving..." : editingCustomer ? "Save Changes" : "Save"}
+              </button>
             </div>
           </div>
         </div>

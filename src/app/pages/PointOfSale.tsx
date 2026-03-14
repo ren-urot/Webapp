@@ -1,6 +1,8 @@
-import { useState } from "react";
-import { Plus, Minus, X, CreditCard, Smartphone, ShoppingBag, Trash2, Banknote, ChevronLeft, ChevronRight, Truck, Store, MapPin } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Plus, Minus, X, CreditCard, Smartphone, ShoppingBag, Trash2, Banknote, ChevronLeft, ChevronRight, Truck, Store, MapPin, Printer, Loader2 } from "lucide-react";
+// Image component with error fallback
 import { ImageWithFallback } from "../components/figma/ImageWithFallback";
+import * as api from "../lib/api";
 
 interface Product {
   id: number;
@@ -14,33 +16,12 @@ interface CartItem extends Product {
   qty: number;
 }
 
-const products: Product[] = [
-  { id: 1, name: "Red Roses Bouquet", price: 1200, image: "https://images.unsplash.com/photo-1763379557051-f62483b50556?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxyZWQlMjByb3NlcyUyMGJvdXF1ZXQlMjBmbG93ZXIlMjBzaG9wfGVufDF8fHx8MTc3MzI2Nzk4NXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Bouquets" },
-  { id: 2, name: "Sunflower Arrangement", price: 1500, image: "https://images.unsplash.com/photo-1567696153798-9111f9cd3d0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdW5mbG93ZXIlMjBib3VxdWV0JTIwYXJyYW5nZW1lbnR8ZW58MXx8fHwxNzczMjMyNDEwfDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Arrangements" },
-  { id: 3, name: "Tulip Bouquet", price: 1200, image: "https://images.unsplash.com/photo-1658925799003-4ff57ce83ea7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0dWxpcCUyMGJvdXF1ZXQlMjBjb2xvcmZ1bHxlbnwxfHx8fDE3NzMyNDc0ODJ8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Bouquets" },
-  { id: 4, name: "Lavender Bundle", price: 500, image: "https://images.unsplash.com/photo-1760926478443-247df5fe9893?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsYXZlbmRlciUyMGRyaWVkJTIwZmxvd2VycyUyMGJ1bmRsZXxlbnwxfHx8fDE3NzMyNjc5ODZ8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Dried" },
-  { id: 5, name: "White Lily Set", price: 1800, image: "https://images.unsplash.com/photo-1687946271298-caa66056eef1?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx3aGl0ZSUyMGxpbHklMjBmbG93ZXIlMjBlbGVnYW50fGVufDF8fHx8MTc3MzI2Nzk4N3ww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Arrangements" },
-  { id: 6, name: "Purple Orchid Pot", price: 2100, image: "https://images.unsplash.com/photo-1767380753017-b7681c1bc172?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxvcmNoaWQlMjBwdXJwbGUlMjBmbG93ZXIlMjBwb3R8ZW58MXx8fHwxNzczMjY3OTg3fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Potted" },
-  { id: 7, name: "Pink Peony Bouquet", price: 1200, image: "https://images.unsplash.com/photo-1609840533612-0cdfb9418281?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxwZW9ueSUyMHBpbmslMjBib3VxdWV0JTIwZnJlc2h8ZW58MXx8fHwxNzczMjY3OTg4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Bouquets" },
-  { id: 8, name: "Mixed Wildflowers", price: 1000, image: "https://images.unsplash.com/photo-1609514281495-a8e2ee3233c9?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtaXhlZCUyMHdpbGRmbG93ZXIlMjBhcnJhbmdlbWVudCUyMHZhc2V8ZW58MXx8fHwxNzczMjY3OTg4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Arrangements" },
-  { id: 9, name: "Dahlia Bouquet", price: 1400, image: "https://images.unsplash.com/photo-1663476252478-b57b8ef0973f?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxkYWhsaWElMjBmbG93ZXIlMjBib3VxdWV0fGVufDF8fHx8MTc3MzI3NDk0MXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Bouquets" },
-  { id: 10, name: "Carnation Arrangement", price: 950, image: "https://images.unsplash.com/photo-1767810164641-11a6fb0a7b52?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjYXJuYXRpb24lMjBmbG93ZXIlMjBhcnJhbmdlbWVudHxlbnwxfHx8fDE3NzMyNzQ5NDF8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Arrangements" },
-  { id: 11, name: "Blue Hydrangea", price: 1600, image: "https://images.unsplash.com/photo-1629379555555-79c361b3736b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxoeWRyYW5nZWElMjBmbG93ZXIlMjBibHVlfGVufDF8fHx8MTc3MzI3NDk0MXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Bouquets" },
-  { id: 12, name: "Succulent Pot", price: 800, image: "https://images.unsplash.com/photo-1649531373919-a52c80fba1e6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzdWNjdWxlbnQlMjBwb3R0ZWQlMjBwbGFudHxlbnwxfHx8fDE3NzMyMjk4MTJ8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Potted" },
-  { id: 13, name: "Cherry Blossom Branch", price: 1100, image: "https://images.unsplash.com/photo-1715208013039-fa1f08715ab8?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjaGVycnklMjBibG9zc29tJTIwc3ByaW5nJTIwYnJhbmNofGVufDF8fHx8MTc3MzI3NDk0Mnww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Arrangements" },
-  { id: 14, name: "Dried Eucalyptus", price: 650, image: "https://images.unsplash.com/photo-1678830058217-4ce4dd577629?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxkcmllZCUyMGV1Y2FseXB0dXMlMjBmbG93ZXJzfGVufDF8fHx8MTc3MzI3NDk0M3ww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Dried" },
-  { id: 15, name: "Mini Cactus Pot", price: 450, image: "https://images.unsplash.com/photo-1758903823393-590ccfb3bcc4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxjYWN0dXMlMjBzbWFsbCUyMHBvdHRlZHxlbnwxfHx8fDE3NzMyNzQ5NDN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Potted" },
-  { id: 16, name: "Gerbera Daisy Mix", price: 900, image: "https://images.unsplash.com/photo-1648316356281-c9354efc019a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxnZXJiZXJhJTIwZGFpc3klMjBjb2xvcmZ1bHxlbnwxfHx8fDE3NzMyNzQ5NDN8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Bouquets" },
-  { id: 17, name: "Purple Iris Set", price: 1300, image: "https://images.unsplash.com/photo-1713526979339-e2a44ee120eb?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxpcmlzJTIwcHVycGxlJTIwZmxvd2VyfGVufDF8fHx8MTc3MzI3NDk0NHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Arrangements" },
-  { id: 18, name: "Jasmine Bouquet", price: 750, image: "https://images.unsplash.com/photo-1652018539007-fda8e4103459?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxqYXNtaW5lJTIwd2hpdGUlMjBmbG93ZXJzfGVufDF8fHx8MTc3MzIxMDg0NXww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Bouquets" },
-  { id: 19, name: "Lily of the Valley", price: 1700, image: "https://images.unsplash.com/photo-1654679929885-742d53468f4a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxsaWx5JTIwb2YlMjB0aGUlMjB2YWxsZXklMjBib3VxdWV0fGVufDF8fHx8MTc3MzI3NDk0NHww&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Arrangements" },
-  { id: 20, name: "Marigold Arrangement", price: 600, image: "https://images.unsplash.com/photo-1686847909012-c6a8f5d6baf2?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxtYXJpZ29sZCUyMG9yYW5nZSUyMGZsb3dlcnxlbnwxfHx8fDE3NzMyNzQ5NDV8MA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral", category: "Dried" },
-];
-
 type PaymentMethod = "card" | "gcash" | "cash" | null;
 type FulfillmentMethod = "pickup" | "delivery";
 
 export default function PointOfSale() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [activeCategory, setActiveCategory] = useState("All");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(null);
@@ -56,7 +37,199 @@ export default function PointOfSale() {
   // Cash form state
   const [cashReceived, setCashReceived] = useState("");
 
-  const categories = ["All", "Bouquets", "Arrangements", "Potted", "Dried"];
+  // Load products from database
+  useEffect(() => {
+    const loadProducts = async () => {
+      try {
+        setLoadingProducts(true);
+        const data = await api.getProducts();
+        setProducts(data);
+      } catch (err) {
+        console.error("Failed to load POS products:", err);
+      } finally {
+        setLoadingProducts(false);
+      }
+    };
+    loadProducts();
+  }, []);
+
+  // Receipt printing state
+  const [autoPrintReceipt, setAutoPrintReceipt] = useState(false);
+  const [lastReceipt, setLastReceipt] = useState<{
+    items: CartItem[];
+    subtotal: number;
+    tax: number;
+    deliveryFee: number;
+    total: number;
+    fulfillment: FulfillmentMethod;
+    paymentMethod: string;
+    cashReceived?: number;
+    change?: number;
+    date: string;
+    time: string;
+    receiptNo: string;
+  } | null>(null);
+
+  const printReceipt = useCallback((receiptData: NonNullable<typeof lastReceipt>) => {
+    const printWindow = window.open("", "_blank", "width=320,height=600");
+    if (!printWindow) return;
+
+    const itemsHtml = receiptData.items
+      .map(
+        (i) => `
+        <tr>
+          <td style="text-align:left;padding:2px 0;font-size:12px;">${i.name} x${i.qty}</td>
+          <td style="text-align:right;padding:2px 0;font-size:12px;">P${(i.price * i.qty).toLocaleString()}</td>
+        </tr>`
+      )
+      .join("");
+
+    const paymentLabel =
+      receiptData.paymentMethod === "card"
+        ? "Card"
+        : receiptData.paymentMethod === "gcash"
+        ? "GCash"
+        : "Cash";
+
+    const cashSection =
+      receiptData.paymentMethod === "cash" && receiptData.cashReceived != null
+        ? `
+        <tr>
+          <td style="text-align:left;padding:2px 0;font-size:12px;">Cash Received</td>
+          <td style="text-align:right;padding:2px 0;font-size:12px;">P${receiptData.cashReceived.toLocaleString()}</td>
+        </tr>
+        <tr>
+          <td style="text-align:left;padding:2px 0;font-size:12px;">Change</td>
+          <td style="text-align:right;padding:2px 0;font-size:12px;">P${(receiptData.change ?? 0).toLocaleString()}</td>
+        </tr>`
+        : "";
+
+    const deliverySection =
+      receiptData.fulfillment === "delivery"
+        ? `
+        <tr>
+          <td style="text-align:left;padding:2px 0;font-size:12px;">Delivery Fee</td>
+          <td style="text-align:right;padding:2px 0;font-size:12px;">P${receiptData.deliveryFee.toLocaleString()}</td>
+        </tr>`
+        : "";
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Receipt</title>
+        <style>
+          @page { margin: 0; size: 80mm auto; }
+          body {
+            font-family: 'Courier New', monospace;
+            width: 72mm;
+            margin: 4mm auto;
+            padding: 0;
+            color: #000;
+            font-size: 12px;
+            line-height: 1.4;
+          }
+          .center { text-align: center; }
+          .divider {
+            border: none;
+            border-top: 1px dashed #000;
+            margin: 6px 0;
+          }
+          table { width: 100%; border-collapse: collapse; }
+          .bold { font-weight: bold; }
+          .total-row td {
+            font-size: 14px;
+            font-weight: bold;
+            padding: 4px 0;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="center">
+          <div class="bold" style="font-size:16px;margin-bottom:2px;">Bloom & Petal</div>
+          <div style="font-size:11px;">Flower Shop</div>
+          <div style="font-size:10px;color:#555;">123 Flower St., Makati City</div>
+          <div style="font-size:10px;color:#555;">Tel: (02) 8123-4567</div>
+        </div>
+
+        <hr class="divider" />
+
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:#555;">
+          <span>Receipt #${receiptData.receiptNo}</span>
+          <span>${receiptData.date}</span>
+        </div>
+        <div style="font-size:10px;color:#555;">Time: ${receiptData.time}</div>
+        <div style="font-size:10px;color:#555;">Payment: ${paymentLabel}</div>
+        <div style="font-size:10px;color:#555;">Type: ${receiptData.fulfillment === "delivery" ? "Delivery" : "Store Pickup"}</div>
+
+        <hr class="divider" />
+
+        <table>
+          <thead>
+            <tr>
+              <th style="text-align:left;font-size:11px;padding-bottom:4px;border-bottom:1px solid #ccc;">Item</th>
+              <th style="text-align:right;font-size:11px;padding-bottom:4px;border-bottom:1px solid #ccc;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${itemsHtml}
+          </tbody>
+        </table>
+
+        <hr class="divider" />
+
+        <table>
+          <tbody>
+            <tr>
+              <td style="text-align:left;padding:2px 0;font-size:12px;">Subtotal</td>
+              <td style="text-align:right;padding:2px 0;font-size:12px;">P${receiptData.subtotal.toLocaleString()}</td>
+            </tr>
+            <tr>
+              <td style="text-align:left;padding:2px 0;font-size:12px;">Tax (12%)</td>
+              <td style="text-align:right;padding:2px 0;font-size:12px;">P${receiptData.tax.toLocaleString()}</td>
+            </tr>
+            ${deliverySection}
+          </tbody>
+        </table>
+
+        <hr class="divider" />
+
+        <table>
+          <tbody>
+            <tr class="total-row">
+              <td style="text-align:left;">TOTAL</td>
+              <td style="text-align:right;">P${receiptData.total.toLocaleString()}</td>
+            </tr>
+            ${cashSection}
+          </tbody>
+        </table>
+
+        <hr class="divider" />
+
+        <div class="center" style="margin-top:8px;">
+          <div style="font-size:12px;font-weight:bold;">Thank you for your purchase!</div>
+          <div style="font-size:10px;color:#555;margin-top:4px;">Visit us again at Bloom & Petal</div>
+          <div style="font-size:10px;color:#555;">www.bloomandpetal.ph</div>
+        </div>
+
+        <div class="center" style="margin-top:12px;font-size:9px;color:#999;">
+          --- End of Receipt ---
+        </div>
+
+        <script>
+          window.onload = function() {
+            window.print();
+            window.onafterprint = function() { window.close(); };
+            setTimeout(function() { window.close(); }, 10000);
+          };
+        </script>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+  }, []);
+
+  const categories = ["All", "Flowers", "Dried Flowers", "Potted", "Supplies", "Accessories"];
 
   const filtered = activeCategory === "All" ? products : products.filter(p => p.category === activeCategory);
 
@@ -89,6 +262,45 @@ export default function PointOfSale() {
   const total = subtotal + tax + deliveryFee;
 
   const handlePayment = () => {
+    // Save order to backend
+    const itemsSummary = cart.map(i => `${i.name} x${i.qty}`).join(", ");
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    const timeStr = now.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+    const receiptNo = `BP-${now.getFullYear().toString().slice(-2)}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}`;
+
+    api.createOrder({
+      customer: "Walk-in Customer",
+      items: itemsSummary,
+      date: dateStr,
+      total: `P${total.toLocaleString()}`,
+      status: "Completed",
+    }).catch(err => console.error("Failed to save order:", err));
+
+    // Prepare receipt data
+    const receiptData: NonNullable<typeof lastReceipt> = {
+      items: cart,
+      subtotal,
+      tax,
+      deliveryFee,
+      total,
+      fulfillment,
+      paymentMethod: paymentMethod ?? "cash",
+      cashReceived: paymentMethod === "cash" ? Number(cashReceived) : undefined,
+      change: paymentMethod === "cash" ? Number(cashReceived) - total : undefined,
+      date: dateStr,
+      time: timeStr,
+      receiptNo,
+    };
+
+    // Set last receipt
+    setLastReceipt(receiptData);
+
+    // Print receipt if auto print is enabled
+    if (autoPrintReceipt) {
+      printReceipt(receiptData);
+    }
+
     setPaymentMethod(null);
     setShowSuccess(true);
     setCart([]);
@@ -123,6 +335,13 @@ export default function PointOfSale() {
 
           {/* Products with arrows */}
           <div className="flex-1 flex items-center gap-2 min-h-0">
+            {loadingProducts ? (
+              <div className="flex-1 h-full flex items-center justify-center">
+                <Loader2 className="w-8 h-8 text-[#ff4e00] animate-spin" />
+                <span className="ml-3 text-[#5d5d5d] text-[14px]">Loading products...</span>
+              </div>
+            ) : (
+            <>
             {/* Left Arrow */}
             <button
               onClick={() => setProductPage(prev => Math.max(0, prev - 1))}
@@ -134,25 +353,35 @@ export default function PointOfSale() {
 
             {/* Products Grid */}
             <div className="flex-1 h-full grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 grid-rows-3 gap-2 min-h-0">
-              {pagedProducts.map(product => (
-                <button
-                  key={product.id}
-                  onClick={() => addToCart(product)}
-                  className="group bg-white rounded-[8px] border border-[#e9e9e9] overflow-hidden hover:border-[#ff4e00] hover:shadow-md transition-all text-left flex flex-col min-w-0 min-h-0"
-                >
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    <ImageWithFallback
-                      src={product.image}
-                      alt={product.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
+              {pagedProducts.length === 0 ? (
+                <div className="col-span-full row-span-full flex flex-col items-center justify-center">
+                  <div className="w-12 h-12 rounded-full bg-[#fff5f0] flex items-center justify-center mb-2">
+                    <ShoppingBag className="w-6 h-6 text-[#ff4e00]" />
                   </div>
-                  <div className="p-1.5 flex-shrink-0">
-                    <p className="text-[#383838] text-[12px] font-medium truncate">{product.name}</p>
-                    <p className="text-[#ff4e00] text-[13px] font-semibold">P{product.price.toLocaleString()}</p>
-                  </div>
-                </button>
-              ))}
+                  <p className="text-[#383838] text-[16px] font-medium">No data available</p>
+                  <p className="text-[#999] text-[13px] mt-1">Products will appear here once added</p>
+                </div>
+              ) : (
+                pagedProducts.map(product => (
+                  <button
+                    key={product.id}
+                    onClick={() => addToCart(product)}
+                    className="group bg-white rounded-[8px] border border-[#e9e9e9] overflow-hidden hover:border-[#ff4e00] hover:shadow-md transition-all text-left flex flex-col min-w-0 min-h-0"
+                  >
+                    <div className="flex-1 min-h-0 overflow-hidden">
+                      <ImageWithFallback
+                        src={product.image}
+                        alt={product.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      />
+                    </div>
+                    <div className="p-1.5 flex-shrink-0">
+                      <p className="text-[#383838] text-[12px] font-medium truncate">{product.name}</p>
+                      <p className="text-[#ff4e00] text-[13px] font-semibold">P{product.price.toLocaleString()}</p>
+                    </div>
+                  </button>
+                ))
+              )}
             </div>
 
             {/* Right Arrow */}
@@ -163,6 +392,8 @@ export default function PointOfSale() {
             >
               <ChevronRight className="w-5 h-5" />
             </button>
+            </>
+            )}
           </div>
         </div>
 
@@ -288,6 +519,25 @@ export default function PointOfSale() {
                   <div className="flex justify-between text-[16px] font-semibold pt-1.5 border-t border-[#e9e9e9]">
                     <span className="text-[#383838]">Total</span>
                     <span className="text-[#ff4e00]">P{total.toLocaleString()}</span>
+                  </div>
+
+                  {/* Auto Print Receipt Toggle */}
+                  <div className="flex items-center justify-between pt-2">
+                    <label htmlFor="auto-print" className="flex items-center gap-1.5 cursor-pointer select-none">
+                      <Printer className="w-3.5 h-3.5 text-[#5d5d5d]" />
+                      <span className="text-[#5d5d5d] text-[12px]">Auto-print receipt</span>
+                    </label>
+                    <button
+                      id="auto-print"
+                      onClick={() => setAutoPrintReceipt(!autoPrintReceipt)}
+                      className={`relative w-9 h-5 rounded-full transition-colors ${
+                        autoPrintReceipt ? "bg-[#ff4e00]" : "bg-[#d8d8d8]"
+                      }`}
+                    >
+                      <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
+                        autoPrintReceipt ? "translate-x-[18px]" : "translate-x-0.5"
+                      }`} />
+                    </button>
                   </div>
                 </div>
 
@@ -586,9 +836,18 @@ export default function PointOfSale() {
               </svg>
             </div>
             <h2 className="text-[#383838] text-[24px] font-semibold mb-2">Payment Successful!</h2>
-            <p className="text-[#5d5d5d] text-[14px] mb-6">Transaction has been completed. A receipt has been sent to the customer.</p>
+            <p className="text-[#5d5d5d] text-[14px] mb-6">Transaction has been completed successfully.</p>
+            {lastReceipt && (
+              <button
+                onClick={() => printReceipt(lastReceipt)}
+                className="w-full flex items-center justify-center gap-2 px-6 py-3 border-[1.5px] border-[#ff4e00] text-[#ff4e00] rounded-lg hover:bg-[#fff5f0] transition-colors font-medium mb-2"
+              >
+                <Printer className="w-4 h-4" />
+                Print Receipt
+              </button>
+            )}
             <button
-              onClick={() => setShowSuccess(false)}
+              onClick={() => { setShowSuccess(false); setLastReceipt(null); }}
               className="w-full px-6 py-3 bg-[#ff4e00] text-white rounded-lg hover:bg-[#e64600] transition-colors font-medium"
             >
               Done

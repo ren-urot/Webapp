@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useParams } from "react-router";
-import { ArrowLeft, ChevronLeft, ChevronRight, Plus, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Plus, ArrowUpDown, ArrowUp, ArrowDown, Loader2, Users } from "lucide-react";
+import * as api from "../lib/api";
 
 interface Customer {
   id: number;
@@ -14,34 +15,8 @@ const ROWS_PER_PAGE = 8;
 
 export default function WorkshopRegister() {
   const { id } = useParams();
-  const [customers, setCustomers] = useState<Customer[]>([
-    { id: 1, name: "Susan Santos", email: "susan.santos@gmail.com", phone: "1+ 23 4567 890", registered: false },
-    { id: 2, name: "Mildred Dela Cruz", email: "mildred.delacruz@gmail.com", phone: "1+ 23 4567 890", registered: true },
-    { id: 3, name: "Cristy Villar", email: "cristy.villar@gmail.com", phone: "1+ 23 4567 890", registered: false },
-    { id: 4, name: "Sarah Cruz", email: "sarah.cruz@gmail.com", phone: "1+ 23 4567 890", registered: false },
-    { id: 5, name: "Stella May Santos", email: "stella.santos@gmail.com", phone: "1+ 23 4567 890", registered: false },
-    { id: 6, name: "Kim Dela Cruz", email: "kim.delacruz@gmail.com", phone: "1+ 23 4567 890", registered: false },
-    { id: 7, name: "Michelle Villar", email: "michelle.villar@gmail.com", phone: "1+ 23 4567 890", registered: false },
-    { id: 8, name: "Christine Santos", email: "christine.santos@gmail.com", phone: "1+ 23 4567 890", registered: false },
-    { id: 9, name: "Anna Reyes", email: "anna.reyes@gmail.com", phone: "1+ 23 4567 891", registered: false },
-    { id: 10, name: "Grace Lim", email: "grace.lim@gmail.com", phone: "1+ 23 4567 892", registered: true },
-    { id: 11, name: "Patricia Go", email: "patricia.go@gmail.com", phone: "1+ 23 4567 893", registered: false },
-    { id: 12, name: "Jenny Tan", email: "jenny.tan@gmail.com", phone: "1+ 23 4567 894", registered: false },
-    { id: 13, name: "Maria Lopez", email: "maria.lopez@gmail.com", phone: "1+ 23 4567 895", registered: false },
-    { id: 14, name: "Rosa Gonzales", email: "rosa.gonzales@gmail.com", phone: "1+ 23 4567 896", registered: true },
-    { id: 15, name: "Carmen Aquino", email: "carmen.aquino@gmail.com", phone: "1+ 23 4567 897", registered: false },
-    { id: 16, name: "Diana Castillo", email: "diana.castillo@gmail.com", phone: "1+ 23 4567 898", registered: false },
-    { id: 17, name: "Lorna Bautista", email: "lorna.bautista@gmail.com", phone: "1+ 23 4567 899", registered: false },
-    { id: 18, name: "Teresa Mendez", email: "teresa.mendez@gmail.com", phone: "1+ 23 4567 900", registered: false },
-    { id: 19, name: "Veronica Reyes", email: "veronica.reyes@gmail.com", phone: "1+ 23 4567 901", registered: false },
-    { id: 20, name: "Isabel Santiago", email: "isabel.santiago@gmail.com", phone: "1+ 23 4567 902", registered: false },
-    { id: 21, name: "Beatriz Luna", email: "beatriz.luna@gmail.com", phone: "1+ 23 4567 903", registered: false },
-    { id: 22, name: "Claudia Navarro", email: "claudia.navarro@gmail.com", phone: "1+ 23 4567 904", registered: false },
-    { id: 23, name: "Felicia Ramos", email: "felicia.ramos@gmail.com", phone: "1+ 23 4567 905", registered: true },
-    { id: 24, name: "Gloria Marquez", email: "gloria.marquez@gmail.com", phone: "1+ 23 4567 906", registered: false },
-    { id: 25, name: "Helena Ortega", email: "helena.ortega@gmail.com", phone: "1+ 23 4567 907", registered: false },
-  ]);
-
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [confirmModal, setConfirmModal] = useState<{ open: boolean; customerId: number | null }>({
     open: false,
@@ -51,6 +26,24 @@ export default function WorkshopRegister() {
   const [sortDir, setSortDir] = useState<"asc" | "desc" | null>(null);
 
   type RSortKey = "name" | "email" | "phone";
+
+  useEffect(() => {
+    loadRegistrations();
+  }, [id]);
+
+  const loadRegistrations = async () => {
+    try {
+      setLoading(true);
+      if (id) {
+        const data = await api.getWorkshopRegistrations(id);
+        setCustomers(data);
+      }
+    } catch (err) {
+      console.error("Failed to load workshop registrations:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleSort = (key: RSortKey) => {
     if (sortKey === key) {
@@ -79,14 +72,30 @@ export default function WorkshopRegister() {
   const endIdx = Math.min(startIdx + ROWS_PER_PAGE, sortedCustomers.length);
   const paged = sortedCustomers.slice(startIdx, endIdx);
 
-  const handleRegister = (customerId: number) => {
-    setCustomers(customers.map(c => c.id === customerId ? { ...c, registered: true } : c));
-    setConfirmModal({ open: false, customerId: null });
+  const handleRegister = async (customerId: number) => {
+    try {
+      if (id) {
+        await api.registerForWorkshop(id, customerId);
+        await loadRegistrations();
+      }
+      setConfirmModal({ open: false, customerId: null });
+    } catch (err) {
+      console.error("Failed to register customer:", err);
+    }
   };
 
   const openConfirmModal = (customerId: number) => {
     setConfirmModal({ open: true, customerId });
   };
+
+  if (loading) {
+    return (
+      <div className="h-full flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-[#ff4e00] animate-spin" />
+        <span className="ml-3 text-[#5d5d5d] text-[16px]">Loading registrations...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="h-full flex flex-col max-w-[1400px] mx-auto px-4 sm:px-8 py-4 sm:py-5">
@@ -99,7 +108,7 @@ export default function WorkshopRegister() {
         Register for Flower Arrangement Workshop
       </Link>
 
-      {/* Header with pagination */}
+      {/* Header */}
       <div className="flex items-center justify-between mb-4 flex-shrink-0">
         <h1 className="text-[#ff4e00] text-[24px] sm:text-[32px] font-medium tracking-[-0.64px]">Customers List</h1>
       </div>
@@ -118,29 +127,43 @@ export default function WorkshopRegister() {
               </tr>
             </thead>
             <tbody>
-              {paged.map((customer, index) => (
-                <tr key={customer.id} className={index % 2 === 0 ? "bg-[#f6f6f6]" : "bg-white"}>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{index + 1}</td>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{customer.name}</td>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{customer.email}</td>
-                  <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{customer.phone}</td>
-                  <td className="px-6 py-3.5">
-                    {customer.registered ? (
-                      <button disabled className="px-4 py-1.5 border border-[#4caf50] text-[#4caf50] rounded-[5px] text-[13px] font-semibold cursor-not-allowed opacity-70">
-                        Added to workshop
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => openConfirmModal(customer.id)}
-                        className="px-4 py-1.5 bg-[#ff4e00] text-white rounded-[5px] hover:bg-[#e64600] transition-colors text-[13px] font-semibold flex items-center gap-1"
-                      >
-                        <Plus className="w-3 h-3" />
-                        Add to workshop
-                      </button>
-                    )}
+              {paged.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="text-center py-16">
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-12 h-12 rounded-full bg-[#fff5f0] flex items-center justify-center mb-1">
+                        <Users className="w-6 h-6 text-[#ff4e00]" />
+                      </div>
+                      <p className="text-[#383838] text-[16px] font-medium">No data available</p>
+                      <p className="text-[#999] text-[13px]">Add customers first to register them for workshops</p>
+                    </div>
                   </td>
                 </tr>
-              ))}
+              ) : (
+                paged.map((customer, index) => (
+                  <tr key={customer.id} className={index % 2 === 0 ? "bg-[#f6f6f6]" : "bg-white"}>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{startIdx + index + 1}</td>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{customer.name}</td>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{customer.email}</td>
+                    <td className="px-6 py-3.5 text-[#5d5d5d] text-[16px]">{customer.phone}</td>
+                    <td className="px-6 py-3.5">
+                      {customer.registered ? (
+                        <button disabled className="px-4 py-1.5 border border-[#4caf50] text-[#4caf50] rounded-[5px] text-[13px] font-semibold cursor-not-allowed opacity-70">
+                          Added to workshop
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => openConfirmModal(customer.id)}
+                          className="px-4 py-1.5 bg-[#ff4e00] text-white rounded-[5px] hover:bg-[#e64600] transition-colors text-[13px] font-semibold flex items-center gap-1"
+                        >
+                          <Plus className="w-3 h-3" />
+                          Add to workshop
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
