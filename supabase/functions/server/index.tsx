@@ -63,7 +63,8 @@ app.get(`${BASE}/health`, (c) => {
 // ============================================================
 app.post(`${BASE}/signup`, async (c) => {
   try {
-    const { email, password, fullName, plan, paymentMethod, paymentDetails } = await c.req.json();
+    const { email: rawEmail, password, fullName, plan, paymentMethod, paymentDetails } = await c.req.json();
+    const email = rawEmail?.trim()?.toLowerCase();
 
     if (!email || !password || !fullName) {
       return c.json({ error: "Email, password, and full name are required." }, 400);
@@ -74,7 +75,8 @@ app.post(`${BASE}/signup`, async (c) => {
       return c.json({ error: "Payment method is required for paid plans." }, 400);
     }
 
-    // Create user with email NOT auto-confirmed (requires verification)
+    // Create user with email_confirm: true so Supabase never blocks login.
+    // We track our own email verification via user_metadata.app_verified.
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password,
@@ -83,8 +85,10 @@ app.post(`${BASE}/signup`, async (c) => {
         plan: plan || "basic",
         payment_method: paymentMethod || null,
         payment_details: paymentDetails || null,
+        app_verified: false,  // Our own verification flag
       },
-      email_confirm: false,
+      // Automatically confirm so signInWithPassword always works
+      email_confirm: true,
     });
 
     if (error) {
@@ -94,15 +98,19 @@ app.post(`${BASE}/signup`, async (c) => {
         const { data: listData } = await supabase.auth.admin.listUsers();
         const existingUser = listData?.users?.find((u: any) => u.email === email);
 
-        if (existingUser && !existingUser.email_confirmed_at) {
-          // User exists but email is NOT confirmed — update their info and re-issue code
+        if (existingUser && !existingUser.user_metadata?.app_verified) {
+          // User exists but hasn't completed OUR verification — update their info and re-issue code
+          // Also confirm email at Supabase level so signInWithPassword always works
           await supabase.auth.admin.updateUserById(existingUser.id, {
             password,
+            email_confirm: true,
             user_metadata: {
+              ...existingUser.user_metadata,
               name: fullName,
               plan: plan || "basic",
               payment_method: paymentMethod || null,
               payment_details: paymentDetails || null,
+              app_verified: false,
             },
           });
 
@@ -117,7 +125,7 @@ app.post(`${BASE}/signup`, async (c) => {
           }, 201);
         }
 
-        // User exists and IS confirmed — truly a duplicate
+        // User exists and IS verified — truly a duplicate
         console.log(`Signup rejected: ${email} is already registered and verified.`);
         return c.json({ error: "This email is already registered. Please log in instead." }, 409);
       }
@@ -130,7 +138,7 @@ app.post(`${BASE}/signup`, async (c) => {
     const code = String(Math.floor(100000 + Math.random() * 900000));
     await kv.set(`verify_${email}`, { code, userId: data.user.id, createdAt: Date.now() });
 
-    console.log(`User created (unverified): ${data.user.id}, verification code generated for ${email}`);
+    console.log(`User created: ${data.user.id}, verification code generated for ${email}`);
     // In production, you would send this code via email. For demo, it's returned in the response.
     return c.json({
       user: { id: data.user.id, email: data.user.email, name: fullName, plan: plan || "basic" },
@@ -146,13 +154,16 @@ app.post(`${BASE}/signup`, async (c) => {
 // Verify email with code
 app.post(`${BASE}/verify-email`, async (c) => {
   try {
-    const { email, code } = await c.req.json();
+    const { email: rawEmail, code } = await c.req.json();
+    const email = rawEmail?.trim()?.toLowerCase();
 
     if (!email || !code) {
       return c.json({ error: "Email and verification code are required." }, 400);
     }
 
     const stored: any = await kv.get(`verify_${email}`);
+    console.log(`Verify-email: email=${email}, submitted_code=${code} (type: ${typeof code}), stored=`, JSON.stringify(stored));
+
     if (!stored) {
       return c.json({ error: "No verification pending for this email. Please sign up first." }, 400);
     }
@@ -163,13 +174,22 @@ app.post(`${BASE}/verify-email`, async (c) => {
       return c.json({ error: "Verification code has expired. Please sign up again." }, 400);
     }
 
-    if (stored.code !== code) {
+    // Use String() coercion on both sides to handle type mismatches from JSONB
+    const storedCode = String(stored.code).trim();
+    const submittedCode = String(code).trim();
+    console.log(`Verify-email: comparing storedCode="${storedCode}" (type: ${typeof stored.code}) vs submittedCode="${submittedCode}"`);
+
+    if (storedCode !== submittedCode) {
       return c.json({ error: "Invalid verification code. Please try again." }, 400);
     }
 
-    // Confirm the user's email via admin API
+    // Mark user as app-verified in user_metadata
+    const { data: userData } = await supabase.auth.admin.getUserById(stored.userId);
     const { data, error } = await supabase.auth.admin.updateUserById(stored.userId, {
-      email_confirm: true,
+      user_metadata: {
+        ...(userData?.user?.user_metadata || {}),
+        app_verified: true,
+      },
     });
 
     if (error) {
@@ -191,7 +211,8 @@ app.post(`${BASE}/verify-email`, async (c) => {
 // Resend verification code
 app.post(`${BASE}/resend-code`, async (c) => {
   try {
-    const { email } = await c.req.json();
+    const { email: rawEmail } = await c.req.json();
+    const email = rawEmail?.trim()?.toLowerCase();
 
     if (!email) {
       return c.json({ error: "Email is required." }, 400);
@@ -220,7 +241,8 @@ app.post(`${BASE}/resend-code`, async (c) => {
 // Check login status - helps detect unverified users
 app.post(`${BASE}/login-check`, async (c) => {
   try {
-    const { email } = await c.req.json();
+    const { email: rawEmail } = await c.req.json();
+    const email = rawEmail?.trim()?.toLowerCase();
     if (!email) {
       return c.json({ error: "Email is required." }, 400);
     }
@@ -232,7 +254,8 @@ app.post(`${BASE}/login-check`, async (c) => {
       return c.json({ exists: false, verified: false });
     }
 
-    const isVerified = !!user.email_confirmed_at;
+    // Check our own app_verified flag in user_metadata
+    const isVerified = !!user.user_metadata?.app_verified;
     const hasPendingVerification = !!(await kv.get(`verify_${email}`));
 
     return c.json({ exists: true, verified: isVerified, hasPendingVerification });
@@ -687,18 +710,21 @@ app.get(`${BASE}/products`, async (c) => {
 // ============================================================
 app.post(`${BASE}/pos/sale`, async (c) => {
   try {
-    const { cartItems } = await c.req.json();
+    const body = await c.req.json();
+    const { cartItems } = body;
     // cartItems: [{ id: number, qty: number }, ...]
     if (!cartItems || !Array.isArray(cartItems) || cartItems.length === 0) {
+      console.log(`POS Sale: Rejected - invalid cartItems. Received body:`, JSON.stringify(body));
       return c.json({ error: "Cart items are required." }, 400);
     }
 
     console.log(`POS Sale: Processing ${cartItems.length} cart items:`, JSON.stringify(cartItems));
 
     const items: any[] = (await kv.get("crm_inventory")) || [];
-    console.log(`POS Sale: Loaded ${items.length} inventory items from KV`);
+    console.log(`POS Sale: Loaded ${items.length} inventory items from KV. IDs: ${items.map((i: any) => `${i.id}(${typeof i.id})`).join(', ')}`);
     const lowStockAlerts: string[] = [];
     const deductions: any[] = [];
+    const notFound: any[] = [];
 
     for (const cartItem of cartItems) {
       // Try both strict and loose ID matching to handle type mismatches
@@ -710,9 +736,10 @@ app.post(`${BASE}/pos/sale`, async (c) => {
         }
       }
       if (idx !== -1) {
-        const oldStock = items[idx].stock;
-        items[idx].stock = Math.max(0, Number(items[idx].stock) - Number(cartItem.qty));
-        deductions.push({ name: items[idx].name, oldStock, newStock: items[idx].stock, qty: cartItem.qty });
+        const oldStock = Number(items[idx].stock);
+        const deductQty = Number(cartItem.qty);
+        items[idx].stock = Math.max(0, oldStock - deductQty);
+        deductions.push({ name: items[idx].name, id: items[idx].id, oldStock, newStock: items[idx].stock, qty: deductQty });
         // Update status based on new stock level
         if (items[idx].stock === 0) {
           items[idx].status = "Out of Stock";
@@ -723,19 +750,21 @@ app.post(`${BASE}/pos/sale`, async (c) => {
           items[idx].status = "In Stock";
         }
       } else {
-        console.log(`POS Sale: WARNING - Cart item ID ${cartItem.id} (type: ${typeof cartItem.id}) not found in inventory. Inventory IDs: ${items.map((i: any) => `${i.id}(${typeof i.id})`).join(', ')}`);
+        notFound.push({ id: cartItem.id, type: typeof cartItem.id });
+        console.log(`POS Sale: WARNING - Cart item ID ${cartItem.id} (type: ${typeof cartItem.id}) not found in inventory.`);
       }
     }
 
+    console.log(`POS Sale: Saving updated inventory. Deductions: ${JSON.stringify(deductions)}, Not found: ${JSON.stringify(notFound)}`);
     await kv.set("crm_inventory", items);
-    console.log(`POS Sale: Stock deductions saved:`, JSON.stringify(deductions));
+    console.log(`POS Sale: Inventory saved successfully.`);
 
     // Send low stock notifications
     for (const alert of lowStockAlerts) {
       await addNotification("Low Stock Alert", `${alert}. Restock recommended.`, "inventory");
     }
 
-    return c.json({ success: true, message: "Inventory stock updated after sale.", deductions });
+    return c.json({ success: true, message: "Inventory stock updated after sale.", deductions, notFound });
   } catch (error) {
     console.log(`Error deducting inventory stock after POS sale: ${error}`);
     return c.json({ error: `Failed to deduct stock: ${error}` }, 500);
