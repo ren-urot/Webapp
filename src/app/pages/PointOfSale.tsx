@@ -279,8 +279,11 @@ export default function PointOfSale() {
     }).catch(err => console.error("Failed to save order:", err));
 
     // Deduct inventory stock
-    api.posSale(cart.map(i => ({ id: i.id, qty: i.qty })))
-      .then(() => {
+    const saleItems = cart.map(i => ({ id: i.id, qty: i.qty }));
+    console.log("POS Sale: Sending cart items for stock deduction:", JSON.stringify(saleItems));
+    api.posSale(saleItems)
+      .then((result) => {
+        console.log("POS Sale: Stock deduction response:", JSON.stringify(result));
         // Refresh products list to reflect updated stock
         api.getProducts().then(setProducts).catch(err => console.error("Failed to refresh products:", err));
       })
