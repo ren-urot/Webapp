@@ -1,7 +1,7 @@
 // Frontend API helper for Flowershop CRM
 // All data operations go through the Supabase Edge Function server
 
-import { projectId, publicAnonKey } from "../utils/supabase/info";
+import { projectId, publicAnonKey } from "/utils/supabase/info";
 
 const API_BASE = `https://${projectId}.supabase.co/functions/v1/make-server-abc5f7d2`;
 
