@@ -72,12 +72,13 @@ export const createDelivery = (data: any) =>
 
 // POS Products
 export const getProducts = () => request<any[]>("/products");
-export const createProduct = (data: any) =>
-  request<any>("/products", { method: "POST", body: JSON.stringify(data) });
-export const updateProduct = (id: number, data: any) =>
-  request<any>(`/products/${id}`, { method: "PUT", body: JSON.stringify(data) });
-export const deleteProduct = (id: number) =>
-  request<{ success: boolean }>(`/products/${id}`, { method: "DELETE" });
+
+// POS Sale - deduct inventory stock
+export const posSale = (cartItems: { id: number; qty: number }[]) =>
+  request<{ success: boolean; message: string; deductions?: any[]; notFound?: any[] }>("/pos/sale", {
+    method: "POST",
+    body: JSON.stringify({ cartItems }),
+  });
 
 // Notifications
 export const getNotifications = () => request<any[]>("/notifications");

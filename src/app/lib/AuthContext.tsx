@@ -25,15 +25,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session: s } }) => {
-      setSession(s);
-      setUser(s?.user ?? null);
+    // Get initial session — gracefully handle stale/invalid refresh tokens
+    supabase.auth.getSession().then(({ data: { session: s }, error }) => {
+      if (error) {
+        console.warn("Session retrieval failed (stale token), clearing session:", error.message);
+        // Clear any stale auth data from storage so the error doesn't repeat
+        supabase.auth.signOut().catch(() => {});
+        setSession(null);
+        setUser(null);
+      } else {
+        setSession(s);
+        setUser(s?.user ?? null);
+      }
       setLoading(false);
     });
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === "TOKEN_REFRESHED" && !s) {
+        // Refresh failed — stale session, force sign-out
+        console.warn("Token refresh failed, signing out.");
+        supabase.auth.signOut().catch(() => {});
+        setSession(null);
+        setUser(null);
+        setLoading(false);
+        return;
+      }
+      if (event === "SIGNED_OUT") {
+        setSession(null);
+        setUser(null);
+        setLoading(false);
+        return;
+      }
       setSession(s);
       setUser(s?.user ?? null);
       setLoading(false);
