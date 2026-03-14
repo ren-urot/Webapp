@@ -104,7 +104,11 @@ export default function SignUp() {
 
   // If already logged in, redirect to dashboard
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.warn("SignUp: stale session detected, staying on signup:", error.message);
+        return;
+      }
       if (session) {
         navigate("/", { replace: true });
       }
@@ -188,9 +192,10 @@ export default function SignUp() {
     setLoading(true);
     try {
       console.log("Creating user account...");
+      const normalizedEmail = email.trim().toLowerCase();
       const result = await api.signUp({
         fullName,
-        email,
+        email: normalizedEmail,
         password,
         plan: selectedPlan,
         paymentMethod: isPaidPlan ? paymentMethod : undefined,
@@ -239,11 +244,12 @@ export default function SignUp() {
 
     setLoading(true);
     try {
-      await api.verifyEmail({ email, code });
+      const normalizedEmail = email.trim().toLowerCase();
+      await api.verifyEmail({ email: normalizedEmail, code });
       console.log("Email verified, signing in...");
 
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
+        email: normalizedEmail,
         password,
       });
 

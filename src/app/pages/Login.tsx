@@ -16,7 +16,12 @@ export default function Login() {
 
   // If already logged in, redirect to dashboard
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        // Stale/invalid session — stay on login page
+        console.warn("Login: stale session detected, staying on login:", error.message);
+        return;
+      }
       if (session) {
         navigate("/", { replace: true });
       }
